@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0F0E0C">
+<meta name="description" content="Hitta lunch nära dig — meny, betyg och deals direkt.">
+<title>luunch — lunch nära dig nu</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Plus+Jakarta+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0F0E0C;
+  --surface: #1A1916;
+  --surface2: #222018;
+  --border: #2E2C27;
+  --ink: #F2EDE4;
+  --ink2: #9E9A8E;
+  --accent: #F0651A;
+  --accent-glow: rgba(240,101,26,0.2);
+  --gold: #D4A843;
+  --green: #4CAF7D;
+  --red: #E05252;
+  --radius: 20px;
+  --radius-sm: 12px;
+}
+
+html { height: 100%; }
+body {
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-weight: 400;
+  overflow-x: hidden;
+  padding-bottom: 90px;
+}
+
+/* ── NOISE TEXTURE OVERLAY ── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.4;
+}
+
+/* ── HEADER ── */
+header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(15,14,12,0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.logo {
+  font-family: 'Playfair Display', serif;
+  font-weight: 900;
+  font-size: 1.5rem;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+}
+.logo span { color: var(--accent); }
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.time-pill {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--ink2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 5px 11px;
+  border-radius: 99px;
+}
+
+.lunch-indicator {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: pulse 2s infinite;
+}
+.lunch-indicator.off { background: var(--ink2); animation: none; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.8); }
+}
+
+/* ── HERO ── */
+.hero {
+  padding: 32px 20px 24px;
+  position: relative;
+  z-index: 1;
+}
+
+.hero-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 14px;
+}
+.hero-tag::before {
+  content: '';
+  display: block;
+  width: 20px;
+  height: 1.5px;
+  background: var(--accent);
+}
+
+.hero h1 {
+  font-family: 'Playfair Display', serif;
+  font-weight: 900;
+  font-size: clamp(2.4rem, 9vw, 3.2rem);
+  line-height: 1.0;
+  letter-spacing: -0.04em;
+  margin-bottom: 14px;
+}
+
+.hero h1 em {
+  font-style: italic;
+  color: var(--accent);
+}
+
+.hero p {
+  color: var(--ink2);
+  font-size: 0.9rem;
+  font-weight: 300;
+  line-height: 1.6;
+  max-width: 300px;
+}
+
+/* ── LOCATE BUTTON ── */
+.locate-wrap {
+  padding: 0 20px 20px;
+  position: relative;
+  z-index: 1;
+}
+
+.btn-locate {
+  width: 100%;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  padding: 18px 22px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: transform 0.12s, opacity 0.12s;
+  box-shadow: 0 8px 32px var(--accent-glow), 0 2px 8px rgba(0,0,0,0.4);
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-locate::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.12) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.btn-locate:active { transform: scale(0.98); opacity: 0.9; }
+
+.btn-icon {
+  width: 36px; height: 36px;
+  background: rgba(255,255,255,0.15);
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.btn-text { flex: 1; text-align: left; line-height: 1.2; }
+.btn-text strong { display: block; font-size: 0.95rem; }
+.btn-text span { font-size: 0.75rem; opacity: 0.8; font-weight: 300; }
+
+.btn-arrow {
+  font-size: 1.1rem;
+  opacity: 0.8;
+}
+
+.btn-locate.loading { cursor: default; opacity: 0.8; }
+.spinner {
+  width: 18px; height: 18px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: none;
+}
+.btn-locate.loading .spinner { display: block; }
+.btn-locate.loading .btn-arrow { display: none; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── FILTERS ── */
+.filter-section {
+  padding: 0 20px 16px;
+  position: relative;
+  z-index: 1;
+}
+
+.filter-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink2);
+  margin-bottom: 10px;
+}
+
+.filters {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+.filters::-webkit-scrollbar { display: none; }
+
+.chip {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 7px 14px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.15s;
+  color: var(--ink2);
+  flex-shrink: 0;
+}
+.chip:active { transform: scale(0.96); }
+.chip.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+  box-shadow: 0 4px 16px var(--accent-glow);
+}
+
+/* ── STATUS ── */
+.status-bar {
+  padding: 0 20px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  z-index: 1;
+}
+.status-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--border);
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+.status-dot.live { background: var(--green); animation: pulse 1.5s infinite; }
+.status-dot.error { background: var(--red); }
+.status-text { font-size: 0.78rem; color: var(--ink2); }
+
+/* ── ERROR ── */
+.error-box {
+  margin: 0 20px 16px;
+  background: rgba(224,82,82,0.1);
+  border: 1px solid rgba(224,82,82,0.3);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  font-size: 0.85rem;
+  color: #F08080;
+  line-height: 1.5;
+  display: none;
+  position: relative;
+  z-index: 1;
+}
+.error-box.show { display: block; }
+
+/* ── RESULTS ── */
+.results {
+  padding: 0 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: relative;
+  z-index: 1;
+}
+
+/* ── EMPTY STATE ── */
+.empty-state {
+  text-align: center;
+  padding: 48px 20px;
+  color: var(--ink2);
+}
+.empty-emoji { font-size: 2.8rem; margin-bottom: 16px; }
+.empty-state h3 {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.1rem;
+  color: var(--ink);
+  margin-bottom: 8px;
+}
+.empty-state p { font-size: 0.85rem; line-height: 1.6; }
+
+/* ── CARD ── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.15s, border-color 0.15s;
+  animation: fadeUp 0.4s ease both;
+  text-decoration: none;
+  color: inherit;
+  display: block;
+}
+
+.card:nth-child(1) { animation-delay: 0.00s; }
+.card:nth-child(2) { animation-delay: 0.06s; }
+.card:nth-child(3) { animation-delay: 0.12s; }
+.card:nth-child(4) { animation-delay: 0.18s; }
+.card:nth-child(5) { animation-delay: 0.24s; }
+.card:nth-child(6) { animation-delay: 0.30s; }
+.card:nth-child(7) { animation-delay: 0.36s; }
+.card:nth-child(8) { animation-delay: 0.42s; }
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.card:active { transform: scale(0.985); border-color: var(--accent); }
+
+/* Deal badge */
+.card-deal {
+  background: linear-gradient(135deg, var(--gold), #E8901A);
+  color: #1A1200;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 6px 14px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* Photo strip */
+.card-photo {
+  width: 100%;
+  height: 130px;
+  object-fit: cover;
+  display: block;
+  background: var(--surface2);
+}
+.card-photo-placeholder {
+  width: 100%;
+  height: 100px;
+  background: var(--surface2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.5rem;
+}
+
+.card-body { padding: 14px 16px 16px; }
+
+.card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.card-name {
+  font-family: 'Playfair Display', serif;
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  flex: 1;
+}
+
+.card-dist {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+  background: var(--accent-glow);
+  padding: 3px 8px;
+  border-radius: 99px;
+  flex-shrink: 0;
+}
+
+.card-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.card-type {
+  font-size: 0.75rem;
+  color: var(--ink2);
+}
+
+.card-rating {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.star { color: var(--gold); }
+.rating-count { color: var(--ink2); font-weight: 400; }
+
+.card-status {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 99px;
+}
+.card-status.open { background: rgba(76,175,125,0.15); color: var(--green); }
+.card-status.closed { background: rgba(224,82,82,0.12); color: var(--red); }
+.card-status.unknown { background: var(--surface2); color: var(--ink2); }
+
+/* Today's menu */
+.card-menu {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-top: 4px;
+}
+
+.card-menu-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+
+.card-menu-text {
+  font-size: 0.82rem;
+  color: var(--ink);
+  line-height: 1.5;
+  font-weight: 300;
+}
+
+.card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.card-address {
+  font-size: 0.75rem;
+  color: var(--ink2);
+  font-weight: 300;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-right: 8px;
+}
+
+.card-maps-btn {
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  padding: 7px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* ── PRICE DOTS ── */
+.price-dots {
+  font-size: 0.75rem;
+  color: var(--ink2);
+  margin-left: auto;
+  padding-left: 8px;
+}
+
+/* ── BOTTOM NAV ── */
+.bottom-nav {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  background: rgba(15,14,12,0.92);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid var(--border);
+  padding: 12px 0 24px;
+  display: flex;
+  justify-content: space-around;
+  z-index: 100;
+}
+
+.nav-item {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  cursor: pointer;
+  padding: 4px 20px;
+  transition: opacity 0.15s;
+  opacity: 0.4;
+}
+.nav-item.active { opacity: 1; }
+.nav-icon { font-size: 1.25rem; }
+.nav-label {
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.nav-item.active .nav-label { color: var(--accent); }
+
+/* ── TOAST ── */
+.toast {
+  position: fixed;
+  top: 80px; left: 50%;
+  transform: translateX(-50%) translateY(-20px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--ink);
+  padding: 10px 18px;
+  border-radius: 99px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  z-index: 999;
+  opacity: 0;
+  transition: opacity 0.25s, transform 0.25s;
+  white-space: nowrap;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  pointer-events: none;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ── SECTION HEADER ── */
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px 14px;
+  position: relative;
+  z-index: 1;
+}
+.section-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+.section-count {
+  font-size: 0.78rem;
+  color: var(--ink2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 3px 10px;
+  border-radius: 99px;
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">luu<span>n</span>ch</div>
+  <div class="header-right">
+    <div class="lunch-indicator" id="lunchDot"></div>
+    <div class="time-pill" id="timePill">--:--</div>
+  </div>
+</header>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-tag">Stockholm · Lunch nu</div>
+  <h1>Vad äter<br>du <em>idag?</em></h1>
+  <p>Dagens meny, betyg och deals — direkt på skärmen. Inga klick, ingen väntan.</p>
+</div>
+
+<!-- LOCATE BUTTON -->
+<div class="locate-wrap">
+  <button class="btn-locate" id="locateBtn" onclick="locate()">
+    <div class="btn-icon">📍</div>
+    <div class="btn-text">
+      <strong id="locateLabel">Hitta lunch nära mig</strong>
+      <span id="locateSub">Öppna restauranger inom gångavstånd</span>
+    </div>
+    <div class="spinner" id="spinner"></div>
+    <div class="btn-arrow">→</div>
+  </button>
+</div>
+
+<!-- FILTERS -->
+<div class="filter-section">
+  <div class="filter-label">Filtrera</div>
+  <div class="filters">
+    <div class="chip active" onclick="filterChip(this,'alla')">🍽️ Alla</div>
+    <div class="chip" onclick="filterChip(this,'asiatiskt')">🍜 Asiatiskt</div>
+    <div class="chip" onclick="filterChip(this,'burgare')">🍔 Burgare</div>
+    <div class="chip" onclick="filterChip(this,'pizza')">🍕 Pizza</div>
+    <div class="chip" onclick="filterChip(this,'sushi')">🍣 Sushi</div>
+    <div class="chip" onclick="filterChip(this,'vegetariskt')">🥗 Vegetariskt</div>
+    <div class="chip" onclick="filterChip(this,'thai')">🌶️ Thai</div>
+    <div class="chip" onclick="filterChip(this,'indiskt')">🫓 Indiskt</div>
+  </div>
+</div>
+
+<!-- STATUS -->
+<div class="status-bar">
+  <div class="status-dot" id="statusDot"></div>
+  <div class="status-text" id="statusText">Väntar på plats…</div>
+</div>
+
+<!-- ERROR -->
+<div class="error-box" id="errorBox"></div>
+
+<!-- SECTION HEADER (hidden until results) -->
+<div class="section-header" id="sectionHeader" style="display:none">
+  <div class="section-title">Nära dig</div>
+  <div class="section-count" id="sectionCount"></div>
+</div>
+
+<!-- RESULTS -->
+<div class="results" id="results">
+  <div class="empty-state">
+    <div class="empty-emoji">🍽️</div>
+    <h3>Hungrig?</h3>
+    <p>Tryck på knappen ovan så hittar vi<br>öppna lunchställen nära dig just nu.</p>
+  </div>
+</div>
+
+<!-- BOTTOM NAV -->
+<nav class="bottom-nav">
+  <div class="nav-item active">
+    <div class="nav-icon">🔍</div>
+    <div class="nav-label">Hitta</div>
+  </div>
+  <div class="nav-item">
+    <div class="nav-icon">❤️</div>
+    <div class="nav-label">Sparat</div>
+  </div>
+  <div class="nav-item">
+    <div class="nav-icon">⚡</div>
+    <div class="nav-label">Deals</div>
+  </div>
+  <div class="nav-item">
+    <div class="nav-icon">👤</div>
+    <div class="nav-label">Profil</div>
+  </div>
+</nav>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- ════════════════════════════════════════
+     BYT UT YOUR_API_KEY mot din riktiga nyckel
+     ════════════════════════════════════════ -->
+<script>
+const GOOGLE_API_KEY = 'YOUR_API_KEY';
+</script>
+<script>
+
+// ── State ──
+let allPlaces = [];
+let activeFilter = 'alla';
+let userLat = null, userLon = null;
+let isLunchTime = false;
+
+// ── Clock & lunch indicator ──
+function updateClock() {
+  const now = new Date();
+  const h = now.getHours();
+  const m = String(now.getMinutes()).padStart(2,'0');
+  document.getElementById('timePill').textContent = `${h}:${m}`;
+  isLunchTime = h >= 11 && h < 14;
+  const dot = document.getElementById('lunchDot');
+  dot.className = isLunchTime ? 'lunch-indicator' : 'lunch-indicator off';
+  document.querySelector('.hero-tag').textContent = isLunchTime
+    ? '🟢 Lunch pågår nu'
+    : (h < 11 ? '⏳ Lunch om ' + (11-h) + ' timmar' : '✅ Lunch avslutad');
+}
+updateClock();
+setInterval(updateClock, 30000);
+
+// ── Toast ──
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+// ── Status ──
+function setStatus(msg, state='idle') {
+  document.getElementById('statusText').textContent = msg;
+  const dot = document.getElementById('statusDot');
+  dot.className = 'status-dot' + (state === 'live' ? ' live' : state === 'error' ? ' error' : '');
+}
+
+// ── Error ──
+function showError(msg) {
+  const b = document.getElementById('errorBox');
+  b.textContent = msg;
+  b.classList.add('show');
+}
+function hideError() {
+  document.getElementById('errorBox').classList.remove('show');
+}
+
+// ── Haversine distance ──
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = (lat2-lat1)*Math.PI/180;
+  const dLon = (lon2-lon1)*Math.PI/180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function distLabel(m) {
+  return m < 1000 ? Math.round(m/10)*10 + ' m' : (m/1000).toFixed(1) + ' km';
+}
+
+// ── Emoji by type ──
+function placeEmoji(types, name) {
+  const n = (name||'').toLowerCase();
+  if (/sushi|japan|maki/i.test(n)) return '🍣';
+  if (/pizza|pizzeria/i.test(n)) return '🍕';
+  if (/burger|hamburgare/i.test(n)) return '🍔';
+  if (/thai|saigon|vietnam|wok|noodle|ramen/i.test(n)) return '🍜';
+  if (/india|curry|tandoor/i.test(n)) return '🫓';
+  if (/sallad|vegansk|vegan|bowl/i.test(n)) return '🥗';
+  if (types?.includes('cafe') || types?.includes('bakery')) return '☕';
+  if (types?.includes('bar')) return '🍺';
+  return '🍽️';
+}
+
+// ── Price label ──
+function priceLabel(level) {
+  if (!level) return '';
+  const labels = ['', '€', '€€', '€€€', '€€€€'];
+  return labels[level] || '';
+}
+
+// ── Category filter ──
+const filterRegex = {
+  asiatiskt: /kines|japan|asian|wok|dim\s*sum|thai|vietnam|korea|noodle|ramen|kinesisk/i,
+  burgare: /burger|hamburgare|grill|bbq/i,
+  pizza: /pizza|pizzeria/i,
+  sushi: /sushi|maki|japan/i,
+  vegetariskt: /vegansk|vegetarisk|vegan|sallad|salad|green|bowl/i,
+  thai: /thai|bangkok/i,
+  indiskt: /india|indisk|curry|tandoor|masala/i,
+};
+
+function matchesFilter(place, filter) {
+  if (filter === 'alla') return true;
+  const name = (place.name || '').toLowerCase();
+  const types = (place.types || []).join(' ');
+  const cuisine = name + ' ' + types;
+  return filterRegex[filter]?.test(cuisine) ?? true;
+}
+
+// ── Fetch nearby via Google Places API ──
+async function fetchNearbyPlaces(lat, lon) {
+  const radius = 800;
+  const url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lon}&radius=${radius}&type=restaurant&key=${GOOGLE_API_KEY}`;
+  // NOTE: Direct API call works for testing. For production, proxy through backend to protect key.
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('API-fel');
+  const data = await res.json();
+  if (data.status === 'REQUEST_DENIED') throw new Error('API-nyckel ogiltig eller saknar behörighet');
+  return data.results || [];
+}
+
+// ── Photo URL ──
+function photoUrl(photoRef) {
+  if (!photoRef) return null;
+  return `https://maps.googleapis.com/maps/api/place/photo?maxwidth=600&photoreference=${photoRef}&key=${GOOGLE_API_KEY}`;
+}
+
+// ── Render cards ──
+function renderCards(places) {
+  const container = document.getElementById('results');
+  const header = document.getElementById('sectionHeader');
+  const count = document.getElementById('sectionCount');
+  container.innerHTML = '';
+
+  const filtered = activeFilter === 'alla'
+    ? places
+    : places.filter(p => matchesFilter(p, activeFilter));
+
+  if (filtered.length === 0) {
+    header.style.display = 'none';
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-emoji">😔</div>
+        <h3>Inga träffar</h3>
+        <p>Inga ställen matchade filtret.<br>Prova ett annat alternativ.</p>
+      </div>`;
+    return;
+  }
+
+  header.style.display = 'flex';
+  count.textContent = filtered.length + ' ställen';
+
+  filtered.forEach(place => {
+    const dist = (userLat && place.geometry)
+      ? haversine(userLat, userLon, place.geometry.location.lat, place.geometry.location.lng)
+      : null;
+
+    const openNow = place.opening_hours?.open_now;
+    const statusClass = openNow === true ? 'open' : openNow === false ? 'closed' : 'unknown';
+    const statusText = openNow === true ? '● Öppet nu' : openNow === false ? '● Stängt' : 'Okänt';
+
+    const photo = place.photos?.[0]?.photo_reference;
+    const emoji = placeEmoji(place.types, place.name);
+    const price = priceLabel(place.price_level);
+    const rating = place.rating;
+    const ratingCount = place.user_ratings_total;
+    const address = place.vicinity || '';
+    const mapsUrl = `https://www.google.com/maps/place/?q=place_id:${place.place_id}`;
+
+    // Simulated today's menu (in real version: fetch from your DB or restaurant API)
+    const menuItems = [
+      'Köttbullar med potatismos & lingon',
+      'Grillad lax med dillsås & råris',
+      'Pasta Carbonara med parmesan',
+      'Kycklingwok med jasminris',
+      'Vegetarisk lasagne med sallad',
+      'Falafelbowl med hummus & pitabröd',
+      'Fläskkarré med äppelkompott',
+      null // some places don't have menu listed
+    ];
+    const todayMenu = place.name.length % 4 === 0 ? null : menuItems[place.name.charCodeAt(0) % menuItems.length];
+
+    // Simulated deals
+    const hasDeal = place.name.charCodeAt(1) % 5 === 0;
+    const dealText = hasDeal ? '🔥 Lunchdeal 95 kr — inkl. kaffe' : null;
+
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.onclick = () => window.open(mapsUrl, '_blank');
+
+    card.innerHTML = `
+      ${dealText ? `<div class="card-deal">⚡ ${dealText}</div>` : ''}
+      ${photo
+        ? `<img class="card-photo" src="${photoUrl(photo)}" alt="${place.name}" loading="lazy" onerror="this.style.display='none'">`
+        : `<div class="card-photo-placeholder">${emoji}</div>`
+      }
+      <div class="card-body">
+        <div class="card-top">
+          <div class="card-name">${place.name}</div>
+          ${dist !== null ? `<div class="card-dist">${distLabel(dist)}</div>` : ''}
+        </div>
+        <div class="card-meta">
+          <span class="card-type">${emoji} ${place.types?.[0]?.replace(/_/g,' ') || 'Restaurang'}</span>
+          ${rating ? `<span class="card-rating"><span class="star">★</span> ${rating} <span class="rating-count">(${ratingCount})</span></span>` : ''}
+          <span class="card-status ${statusClass}">${statusText}</span>
+          ${price ? `<span class="price-dots">${price}</span>` : ''}
+        </div>
+        ${todayMenu ? `
+        <div class="card-menu">
+          <div class="card-menu-label">Dagens lunch</div>
+          <div class="card-menu-text">${todayMenu}</div>
+        </div>` : ''}
+        <div class="card-footer">
+          <div class="card-address">📍 ${address}</div>
+          <a href="${mapsUrl}" target="_blank" rel="noopener" class="card-maps-btn" onclick="event.stopPropagation()">
+            Vägbeskrivning →
+          </a>
+        </div>
+      </div>
+    `;
+    container.appendChild(card);
+  });
+
+  setStatus(`${filtered.length} ställen hittade nära dig`, 'live');
+}
+
+// ── Filter chip ──
+function filterChip(el, type) {
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  activeFilter = type;
+  if (allPlaces.length > 0) renderCards(allPlaces);
+}
+
+// ── Main locate ──
+async function locate() {
+  const btn = document.getElementById('locateBtn');
+  const label = document.getElementById('locateLabel');
+  const sub = document.getElementById('locateSub');
+
+  if (!navigator.geolocation) {
+    showError('Din webbläsare stöder inte platsinformation.');
+    return;
+  }
+
+  btn.classList.add('loading');
+  label.textContent = 'Hämtar din plats…';
+  sub.textContent = 'Aktiverar GPS';
+  hideError();
+  setStatus('Hämtar din position…');
+
+  navigator.geolocation.getCurrentPosition(async (pos) => {
+    userLat = pos.coords.latitude;
+    userLon = pos.coords.longitude;
+
+    label.textContent = 'Söker restauranger…';
+    sub.textContent = 'Kollar vad som är öppet';
+    setStatus('Söker lunchställen nära dig…');
+
+    try {
+      const places = await fetchNearbyPlaces(userLat, userLon);
+
+      // Sort by distance
+      allPlaces = places
+        .map(p => ({
+          ...p,
+          _dist: p.geometry
+            ? haversine(userLat, userLon, p.geometry.location.lat, p.geometry.location.lng)
+            : 9999
+        }))
+        .sort((a, b) => a._dist - b._dist)
+        .slice(0, 25);
+
+      if (allPlaces.length === 0) {
+        showError('Inga restauranger hittades inom 800 meter. Prova ett annat område.');
+        setStatus('Inga resultat', 'error');
+      } else {
+        renderCards(allPlaces);
+        showToast(`${allPlaces.length} lunchställen nära dig! 🍽️`);
+      }
+
+    } catch(err) {
+      console.error(err);
+      showError(`Kunde inte hämta restauranger: ${err.message}. Kontrollera att API-nyckeln är rätt inlagd.`);
+      setStatus('Fel vid hämtning', 'error');
+    }
+
+    btn.classList.remove('loading');
+    label.textContent = 'Sök igen';
+    sub.textContent = 'Uppdatera resultat';
+
+  }, (err) => {
+    btn.classList.remove('loading');
+    label.textContent = 'Hitta lunch nära mig';
+    sub.textContent = 'Öppna restauranger inom gångavstånd';
+    let msg = 'Kunde inte hämta din plats.';
+    if (err.code === 1) msg = 'Platsbehörighet nekad. Tillåt platsdelning i webbläsaren och försök igen.';
+    if (err.code === 3) msg = 'Timeout — försök igen.';
+    showError(msg);
+    setStatus('Platsbehörighet nekad', 'error');
+  }, {
+    enableHighAccuracy: true,
+    timeout: 10000,
+    maximumAge: 120000
+  });
+}
+</script>
+</body>
+</html>
