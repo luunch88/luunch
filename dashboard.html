@@ -130,28 +130,15 @@ header {
   <a href="/" class="back-link">← Tillbaka till luunch.se</a>
   <div class="login-hero">
     <h1>Välkommen<br>till din <em>dashboard</em></h1>
-    <p>Logga in med din e-postadress och ditt lösenord.</p>
+    <p>Logga in med den e-postadress du använde när du claimade din restaurang.</p>
   </div>
 
-  <div id="formLogin">
-    <label class="form-label">E-postadress</label>
-    <input class="form-input" id="loginEmail" type="email" placeholder="din@restaurang.se">
-    <label class="form-label">Lösenord</label>
-    <input class="form-input" id="loginPassword" type="password" placeholder="••••••••">
-    <button class="btn-primary" id="loginBtn" onclick="login()">Logga in</button>
-    <button class="btn-secondary" onclick="showRegister()">Inget konto? Registrera dig</button>
-    <div id="loginMsg"></div>
-  </div>
-
-  <div id="formRegister" style="display:none">
-    <label class="form-label">E-postadress</label>
-    <input class="form-input" id="regEmail" type="email" placeholder="din@restaurang.se">
-    <label class="form-label">Lösenord</label>
-    <input class="form-input" id="regPassword" type="password" placeholder="Minst 6 tecken">
-    <button class="btn-primary" id="regBtn" onclick="register()">Skapa konto</button>
-    <button class="btn-secondary" onclick="showLogin()">Har du redan konto? Logga in</button>
-    <div id="regMsg"></div>
-  </div>
+  <label class="form-label">E-postadress</label>
+  <input class="form-input" id="loginEmail" type="email" placeholder="din@restaurang.se">
+  <label class="form-label">Lösenord</label>
+  <input class="form-input" id="loginPassword" type="password" placeholder="••••••••">
+  <button class="btn-primary" id="loginBtn" onclick="login()">Logga in</button>
+  <div id="loginMsg"></div>
 </div>
 
 <!-- DASHBOARD PAGE -->
