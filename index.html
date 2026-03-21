@@ -368,12 +368,12 @@ function buildCard(place, data){
     ? `<div class="card-today-hours">🕐 Idag ${data.today_opens}–${data.today_closes}</div>`
     : '';
 
-  // Öppet/stängt badge
-  const openBadge = isOpen===true
+  // Öppet/stängt badge — bara för claimade restauranger
+  const openBadge = !claimed ? '' : isOpen===true
     ? `<span class="badge badge-open">● Öppet nu</span>`
     : isOpen===false
     ? `<span class="badge badge-closed">● Stängt</span>`
-    : tags.opening_hours ? `<span class="badge badge-open">● Öppet</span>` : '';
+    : '';
 
   const card=document.createElement('div');
   card.className='card';
