@@ -72,14 +72,3 @@ export default async function handler(req, res) {
     dishes: dishes || []
   });
 }
-
-  return res.status(200).json({
-    claimed: true,
-    verified: restaurant.verified,
-    phone: restaurant.phone,
-    is_open_now: isOpenNow,      // true/false/null
-    today_opens: todayOpen,       // "11:00"
-    today_closes: todayClose,     // "14:00"
-    menu: menu || null
-  });
-}
