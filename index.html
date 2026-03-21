@@ -279,22 +279,7 @@ function matchFilter(tags,filter){
   return filterRx[filter]?.test(c)??true;
 }
 
-const menuPool=[
-  'Köttbullar med potatismos, gräddsås & lingon',
-  'Grillad laxfilé med dillsås, råris & citron',
-  'Pasta Carbonara med pancetta & parmesan',
-  'Kycklingwok med cashewnötter & jasminris',
-  'Vegetarisk lasagne med fetaost & sallad',
-  'Falafelbowl med hummus, tabouleh & pitabröd',
-  'Fläskkarré med äppelkompott & rostad potatis',
-  'Thai green curry med jasminris & räkor',
-  'Pulled pork burger med coleslaw & pommes',
-  'Sallad med halloumi, körsbärstomater & pesto',
-];
-function getMenu(name){
-  const idx=[...name].reduce((a,c)=>a+c.charCodeAt(0),0)%menuPool.length;
-  return name.charCodeAt(0)%10<7?menuPool[idx]:null;
-}
+function getMenu(name){ return null; } // Only shown when restaurant has added their own menu
 
 async function fetchOverpass(lat,lon){
   const q=`[out:json][timeout:20];(node["amenity"~"restaurant|cafe|fast_food|bar|bakery|pub"](around:800,${lat},${lon});way["amenity"~"restaurant|cafe|fast_food|bar|bakery|pub"](around:800,${lat},${lon}););out center tags;`;
