@@ -133,6 +133,8 @@ header {
 
 .badge-closed { background: rgba(224,82,82,0.1); color: var(--red); }
 .card-today-hours { font-size: 0.78rem; color: var(--ink2); margin-bottom: 10px; }
+.btn-fav { background: transparent; border: 1px solid var(--border); border-radius: 10px; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1rem; flex-shrink: 0; transition: border-color 0.15s, transform 0.1s; }
+.btn-fav:active { transform: scale(0.9); }
 .btn-claim { width:100%; margin-top:12px; background:transparent; border:1px solid var(--border); border-radius:var(--radius-sm); padding:10px 14px; font-size:0.8rem; font-weight:500; color:var(--ink2); cursor:pointer; font-family:'Plus Jakarta Sans',sans-serif; transition:all 0.15s; text-align:center; }
 .btn-claim:hover { border-color:var(--accent); color:var(--accent); }
 .badge-claimed { background:rgba(76,175,125,0.12); color:var(--green); }
@@ -233,9 +235,8 @@ header {
 
 <nav class="bottom-nav">
   <div class="nav-item active"><div class="nav-icon">🔍</div><div class="nav-label">Hitta</div></div>
-  <div class="nav-item"><div class="nav-icon">❤️</div><div class="nav-label">Sparat</div></div>
-  <div class="nav-item"><div class="nav-icon">⚡</div><div class="nav-label">Deals</div></div>
-  <div class="nav-item"><div class="nav-icon">👤</div><div class="nav-label">Profil</div></div>
+  <div class="nav-item" id="navSaved" onclick="showSaved()"><div class="nav-icon">❤️</div><div class="nav-label">Sparat</div></div>
+  <div class="nav-item" id="navDeals" onclick="showDeals()"><div class="nav-icon">⚡</div><div class="nav-label">Deals</div></div>
 </nav>
 
 <div class="toast" id="toast"></div>
@@ -403,6 +404,7 @@ function buildCard(place, data){
       </div>
       <div class="card-footer">
         <div class="card-address">${address||'Se på karta'}</div>
+        <button class="btn-fav" data-fav="${osmId}" onclick="event.stopPropagation();toggleFavorite('${osmId}','${name.replace(/'/g,"\\'")}','${address}','${emoji}')">${isFavorite(osmId)?'❤️':'🤍'}</button>
         <a href="${mapsUrl}" target="_blank" rel="noopener" class="btn-maps" onclick="event.stopPropagation()">Vägbeskrivning →</a>
       </div>
       ${!claimed?`
@@ -443,7 +445,89 @@ async function renderCards(places){
   setStatus(`${filtered.length} ställen hittade nära dig`,'live');
 }
 
-// ── Claim modal ──
+// ── Favorites (localStorage) ──
+function getFavorites(){ try{ return JSON.parse(localStorage.getItem('luunch_favs')||'[]'); }catch(e){ return []; } }
+function saveFavorites(favs){ localStorage.setItem('luunch_favs', JSON.stringify(favs)); }
+function isFavorite(osmId){ return getFavorites().some(f=>f.osmId===osmId); }
+
+function toggleFavorite(osmId, name, address, emoji) {
+  let favs = getFavorites();
+  if(isFavorite(osmId)){
+    favs = favs.filter(f=>f.osmId!==osmId);
+    showToast('Borttagen från sparat');
+  } else {
+    favs.push({ osmId, name, address, emoji, savedAt: Date.now() });
+    showToast('❤️ Sparat!');
+  }
+  saveFavorites(favs);
+  // Uppdatera hjärtat på kortet
+  const btn = document.querySelector(`[data-fav="${osmId}"]`);
+  if(btn) btn.textContent = isFavorite(osmId) ? '❤️' : '🤍';
+}
+
+function showSaved() {
+  const favs = getFavorites();
+  const container = document.getElementById('results');
+  const header = document.getElementById('sectionHeader');
+  const countEl = document.getElementById('sectionCount');
+
+  // Uppdatera nav
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('navSaved').classList.add('active');
+
+  container.innerHTML = '';
+  if(favs.length === 0){
+    header.style.display = 'none';
+    container.innerHTML = `<div class="empty-state"><div class="empty-emoji">🤍</div><h3>Inga sparade ställen</h3><p>Tryck på hjärtat på ett restaurangkort<br>för att spara det här.</p></div>`;
+    return;
+  }
+
+  header.style.display = 'flex';
+  countEl.textContent = favs.length + ' sparade';
+
+  favs.forEach(fav => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.style.animationDelay = '0s';
+    card.innerHTML = `
+      <div class="card-top">
+        <div class="card-emoji-box">${fav.emoji||'🍽️'}</div>
+        <div class="card-top-info">
+          <div class="card-name">${fav.name}</div>
+          <div class="card-badges"><span class="badge badge-type">Sparat</span></div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="card-footer">
+          <div class="card-address">${fav.address||'Se på karta'}</div>
+          <button class="btn-maps" onclick="removeFav('${fav.osmId}', this)">Ta bort</button>
+        </div>
+      </div>`;
+    container.appendChild(card);
+  });
+  setStatus(`${favs.length} sparade ställen`, 'live');
+}
+
+function removeFav(osmId, btn) {
+  let favs = getFavorites().filter(f=>f.osmId!==osmId);
+  saveFavorites(favs);
+  btn.closest('.card').remove();
+  if(getFavorites().length === 0) showSaved();
+  showToast('Borttagen från sparat');
+}
+
+function showDeals() {
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('navDeals').classList.add('active');
+  document.getElementById('sectionHeader').style.display = 'none';
+  document.getElementById('results').innerHTML = `
+    <div class="empty-state">
+      <div class="empty-emoji">⚡</div>
+      <h3>Deals kommer snart</h3>
+      <p>Restauranger kan snart lägga till<br>luncherbjudanden här.</p>
+    </div>`;
+  setStatus('');
+}
 function openClaim(osmId, name, address, lat, lon){
   document.getElementById('claimOsmId').value=osmId;
   document.getElementById('claimName').textContent=name;
