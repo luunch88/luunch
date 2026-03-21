@@ -356,7 +356,8 @@ function buildCard(place, data){
   const osmId=place.type+'/'+place.id;
 
   // Data från vår databas (om restaurangen claimat)
-  const menu=data?.menu||null;
+  const dishes=data?.dishes||[];
+  const menu=dishes.length>0;
   const hasHours=!!data?.today_opens;
   const isOpen=data?.is_open_now;
   const claimed=data?.claimed||false;
@@ -390,10 +391,10 @@ function buildCard(place, data){
       </div>
     </div>
     <div class="card-body">
-      ${menu?`
+      ${dishes.length>0?`
         <div class="card-menu">
           <div class="card-menu-label">Dagens lunch</div>
-          <div class="card-menu-text">${menu.description}${menu.price?` — <strong>${menu.price} kr</strong>`:''}</div>
+          ${dishes.map(d=>`<div class="card-menu-text">• ${d.description}${d.price?` — <strong>${d.price} kr</strong>`:''}</div>`).join('')}
         </div>`:''}
       ${hoursHtml}
       <div class="card-missing-wrap">
