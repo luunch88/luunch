@@ -131,6 +131,8 @@ header {
 .card-address { font-size: 0.73rem; color: var(--ink2); font-weight: 300; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .btn-maps { background: var(--accent); color: white; border: none; border-radius: 10px; padding: 7px 13px; font-size: 0.75rem; font-weight: 600; cursor: pointer; white-space: nowrap; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; font-family: 'Plus Jakarta Sans', sans-serif; }
 
+.badge-closed { background: rgba(224,82,82,0.1); color: var(--red); }
+.card-today-hours { font-size: 0.78rem; color: var(--ink2); margin-bottom: 10px; }
 .btn-claim { width:100%; margin-top:12px; background:transparent; border:1px solid var(--border); border-radius:var(--radius-sm); padding:10px 14px; font-size:0.8rem; font-weight:500; color:var(--ink2); cursor:pointer; font-family:'Plus Jakarta Sans',sans-serif; transition:all 0.15s; text-align:center; }
 .btn-claim:hover { border-color:var(--accent); color:var(--accent); }
 .badge-claimed { background:rgba(76,175,125,0.12); color:var(--green); }
@@ -355,14 +357,21 @@ function buildCard(place, data){
 
   // Data från vår databas (om restaurangen claimat)
   const menu=data?.menu||null;
-  const hasHours=data?.opening_hours?.length>0||!!tags.opening_hours;
+  const hasHours=!!data?.today_opens;
+  const isOpen=data?.is_open_now;
   const claimed=data?.claimed||false;
 
-  // Öppettider från vår DB
-  const days=['Mån','Tis','Ons','Tor','Fre','Lör','Sön'];
-  const hoursHtml=data?.opening_hours?.length>0
-    ? data.opening_hours.map(h=>`<span>${days[h.day_of_week]}: ${h.opens}–${h.closes}</span>`).join('')
+  // Bara dagens öppettider
+  const hoursHtml=hasHours
+    ? `<div class="card-today-hours">🕐 Idag ${data.today_opens}–${data.today_closes}</div>`
     : '';
+
+  // Öppet/stängt badge
+  const openBadge = isOpen===true
+    ? `<span class="badge badge-open">● Öppet nu</span>`
+    : isOpen===false
+    ? `<span class="badge badge-closed">● Stängt</span>`
+    : tags.opening_hours ? `<span class="badge badge-open">● Öppet</span>` : '';
 
   const card=document.createElement('div');
   card.className='card';
@@ -374,7 +383,7 @@ function buildCard(place, data){
         <div class="card-name">${name}</div>
         <div class="card-badges">
           ${dist!==null?`<span class="badge badge-dist">${distLabel(dist)}</span>`:''}
-          ${hasHours?`<span class="badge badge-open">● Öppet</span>`:''}
+          ${openBadge}
           <span class="badge badge-type">${typeLabel}</span>
           ${claimed?`<span class="badge badge-claimed">✓ Verifierad</span>`:''}
         </div>
@@ -386,10 +395,10 @@ function buildCard(place, data){
           <div class="card-menu-label">Dagens lunch</div>
           <div class="card-menu-text">${menu.description}${menu.price?` — <strong>${menu.price} kr</strong>`:''}</div>
         </div>`:''}
-      ${hoursHtml?`<div class="card-hours">${hoursHtml}</div>`:''}
+      ${hoursHtml}
       <div class="card-missing-wrap">
         ${!menu?`<span class="card-missing">🍽️ Ingen meny tillagd</span>`:''}
-        ${!hasHours?`<span class="card-missing">🕐 Inga öppettider tillagda</span>`:''}
+        ${!hasHours&&!tags.opening_hours?`<span class="card-missing">🕐 Inga öppettider tillagda</span>`:''}
       </div>
       <div class="card-footer">
         <div class="card-address">${address||'Se på karta'}</div>
