@@ -2,11 +2,10 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
+  process.env.SUPABASE_SERVICE_KEY // Service key behövs för att skapa användare
 );
 
 export default async function handler(req, res) {
-  // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -22,7 +21,7 @@ export default async function handler(req, res) {
   // Kolla om restaurangen redan är claimad
   const { data: existing } = await supabase
     .from('restaurants')
-    .select('id, email, verified')
+    .select('id, email')
     .eq('osm_id', osm_id)
     .single();
 
@@ -30,7 +29,19 @@ export default async function handler(req, res) {
     return res.status(409).json({ error: 'Denna restaurang är redan claimad' });
   }
 
-  // Skapa restaurang
+  // Skapa Supabase auth-konto med tillfälligt lösenord
+  const tempPassword = Math.random().toString(36).slice(-10) + 'A1!';
+  const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+    email,
+    password: tempPassword,
+    email_confirm: true
+  });
+
+  if (authError && !authError.message.includes('already registered')) {
+    return res.status(500).json({ error: authError.message });
+  }
+
+  // Spara restaurang i databasen
   const { data, error } = await supabase
     .from('restaurants')
     .insert([{ osm_id, name, email, lat, lon, address, verified: false }])
@@ -39,11 +50,9 @@ export default async function handler(req, res) {
 
   if (error) return res.status(500).json({ error: error.message });
 
-  // TODO: skicka verifieringsmail via Supabase Auth eller Resend
-
   return res.status(201).json({
     success: true,
-    message: 'Tack! Kolla din e-post för att verifiera din restaurang.',
-    id: data.id
+    message: 'Restaurang claimad! Gå till luunch.se/dashboard.html för att logga in och sätta ditt lösenord.',
+    tempPassword // Visas för användaren en gång
   });
 }
