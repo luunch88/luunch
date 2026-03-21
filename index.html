@@ -400,7 +400,7 @@ function buildCard(place, data){
       ${hoursHtml}
       <div class="card-missing-wrap">
         ${!menu?`<span class="card-missing">🍽️ Ingen meny tillagd</span>`:''}
-        ${!hasHours&&!tags.opening_hours?`<span class="card-missing">🕐 Inga öppettider tillagda</span>`:''}
+        ${!claimed||(!hasHours&&claimed)?`<span class="card-missing">🕐 Inga öppettider inlagda</span>`:''}
       </div>
       <div class="card-footer">
         <div class="card-address">${address||'Se på karta'}</div>
