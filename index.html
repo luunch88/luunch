@@ -125,6 +125,8 @@ header {
 .card-menu { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 13px; margin-bottom: 12px; }
 .card-menu-label { font-size: 0.65rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); margin-bottom: 3px; }
 .card-menu-text { font-size: 0.82rem; color: var(--ink); line-height: 1.5; font-weight: 300; }
+.card-missing-wrap { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.card-missing { font-size: 0.75rem; color: var(--ink2); font-weight: 400; opacity: 0.7; }
 .card-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border); }
 .card-address { font-size: 0.73rem; color: var(--ink2); font-weight: 300; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .btn-maps { background: var(--accent); color: white; border: none; border-radius: 10px; padding: 7px 13px; font-size: 0.75rem; font-weight: 600; cursor: pointer; white-space: nowrap; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; font-family: 'Plus Jakarta Sans', sans-serif; }
@@ -328,6 +330,10 @@ function renderCards(places){
       </div>
       <div class="card-body">
         ${menu?`<div class="card-menu"><div class="card-menu-label">Dagens lunch</div><div class="card-menu-text">${menu}</div></div>`:''}
+        <div class="card-missing-wrap">
+          ${!menu?`<span class="card-missing">🍽️ Ingen meny tillagd</span>`:''}
+          ${!tags.opening_hours?`<span class="card-missing">🕐 Inga öppettider tillagda</span>`:''}
+        </div>
         <div class="card-footer">
           <div class="card-address">${address||'Se på karta'}</div>
           <a href="${mapsUrl}" target="_blank" rel="noopener" class="btn-maps" onclick="event.stopPropagation()">Vägbeskrivning →</a>
