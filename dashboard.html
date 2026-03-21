@@ -130,16 +130,28 @@ header {
   <a href="/" class="back-link">← Tillbaka till luunch.se</a>
   <div class="login-hero">
     <h1>Välkommen<br>till din <em>dashboard</em></h1>
-    <p>Logga in med den e-postadress du använde när du claimade din restaurang.</p>
+    <p>Logga in med din e-postadress och ditt lösenord.</p>
   </div>
 
-  <label class="form-label">E-postadress</label>
-  <input class="form-input" id="loginEmail" type="email" placeholder="din@restaurang.se">
-  <p class="form-hint">Vi skickar en inloggningslänk till din e-post — inget lösenord behövs.</p>
-  <button class="btn-primary" id="loginBtn" onclick="sendMagicLink()">
-    Skicka inloggningslänk
-  </button>
-  <div id="loginMsg"></div>
+  <div id="formLogin">
+    <label class="form-label">E-postadress</label>
+    <input class="form-input" id="loginEmail" type="email" placeholder="din@restaurang.se">
+    <label class="form-label">Lösenord</label>
+    <input class="form-input" id="loginPassword" type="password" placeholder="••••••••">
+    <button class="btn-primary" id="loginBtn" onclick="login()">Logga in</button>
+    <button class="btn-secondary" onclick="showRegister()">Inget konto? Registrera dig</button>
+    <div id="loginMsg"></div>
+  </div>
+
+  <div id="formRegister" style="display:none">
+    <label class="form-label">E-postadress</label>
+    <input class="form-input" id="regEmail" type="email" placeholder="din@restaurang.se">
+    <label class="form-label">Lösenord</label>
+    <input class="form-input" id="regPassword" type="password" placeholder="Minst 6 tecken">
+    <button class="btn-primary" id="regBtn" onclick="register()">Skapa konto</button>
+    <button class="btn-secondary" onclick="showLogin()">Har du redan konto? Logga in</button>
+    <div id="regMsg"></div>
+  </div>
 </div>
 
 <!-- DASHBOARD PAGE -->
@@ -186,7 +198,7 @@ header {
 // ── Supabase init ──
 // Dessa värden är publika (anon key) — säkert att ha i frontend
 const SUPABASE_URL = 'https://thibluvsuufpgxkcqewb.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRoaWJsdXZzdXVmcGd4a2NxZXdiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQwNDE4NjYsImV4cCI6MjA4OTYxNzg2Nn0.gHkkBI-2ZnaNbPNSsP4GHZkKK7uc5Q9wbuG948oaQe0'; // Byt ut mot din anon key
+const SUPABASE_ANON_KEY = 'SUPABASE_ANON_KEY_HERE'; // Byt ut mot din anon key
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const days = ['Måndag','Tisdag','Onsdag','Torsdag','Fredag','Lördag','Söndag'];
@@ -221,28 +233,57 @@ function toggleDay(i) {
   closes.disabled = !isOn; closes.style.opacity = isOn ? 1 : 0.3;
 }
 
-// ── Send magic link ──
-async function sendMagicLink() {
+// ── Toggle forms ──
+function showRegister() {
+  document.getElementById('formLogin').style.display = 'none';
+  document.getElementById('formRegister').style.display = 'block';
+}
+function showLogin() {
+  document.getElementById('formRegister').style.display = 'none';
+  document.getElementById('formLogin').style.display = 'block';
+}
+
+// ── Login ──
+async function login() {
   const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
   const btn = document.getElementById('loginBtn');
-  const msg = document.getElementById('loginMsg');
-  if (!email) { showMsg('loginMsg', 'Ange din e-postadress.', 'error'); return; }
+  if (!email || !password) { showMsg('loginMsg', 'Fyll i e-post och lösenord.', 'error'); return; }
 
   btn.disabled = true;
-  btn.innerHTML = '<div class="spinner-sm"></div> Skickar…';
+  btn.innerHTML = '<div class="spinner-sm"></div> Loggar in…';
 
-  const { error } = await sb.auth.signInWithOtp({
-    email,
-    options: { emailRedirectTo: window.location.href }
-  });
+  const { error } = await sb.auth.signInWithPassword({ email, password });
 
   if (error) {
-    showMsg('loginMsg', 'Något gick fel: ' + error.message, 'error');
-  } else {
-    showMsg('loginMsg', '✓ Kolla din e-post! Klicka på länken för att logga in.', 'success');
+    showMsg('loginMsg', 'Fel e-post eller lösenord.', 'error');
   }
   btn.disabled = false;
-  btn.innerHTML = 'Skicka inloggningslänk';
+  btn.innerHTML = 'Logga in';
+}
+
+// ── Register ──
+async function register() {
+  const email = document.getElementById('regEmail').value.trim();
+  const password = document.getElementById('regPassword').value;
+  const btn = document.getElementById('regBtn');
+  if (!email || !password) { showMsg('regMsg', 'Fyll i alla fält.', 'error'); return; }
+  if (password.length < 6) { showMsg('regMsg', 'Lösenordet måste vara minst 6 tecken.', 'error'); return; }
+
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner-sm"></div> Skapar konto…';
+
+  const { error } = await sb.auth.signUp({ email, password });
+
+  if (error) {
+    showMsg('regMsg', 'Något gick fel: ' + error.message, 'error');
+  } else {
+    showMsg('regMsg', '✓ Konto skapat! Loggar in…', 'success');
+    // Logga in direkt
+    await sb.auth.signInWithPassword({ email, password });
+  }
+  btn.disabled = false;
+  btn.innerHTML = 'Skapa konto';
 }
 
 // ── Check session ──
