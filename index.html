@@ -564,8 +564,11 @@ async function submitClaim(){
     const data=await res.json();
     if(res.ok){
       resultEl.style.color='var(--green)';
-      resultEl.textContent='✓ '+data.message;
-      setTimeout(closeClaim,3000);
+      if(data.tempPassword){
+        resultEl.innerHTML=`✓ Restaurang claimad!<br><br>Ditt tillfälliga lösenord:<br><strong style="font-size:1.1rem;letter-spacing:0.05em">${data.tempPassword}</strong><br><br><small>Spara detta — du behöver det för att logga in på dashboarden.</small>`;
+      } else {
+        resultEl.textContent='✓ '+data.message;
+      }
     } else {
       resultEl.style.color='var(--red)';
       resultEl.textContent='✗ '+data.error;
