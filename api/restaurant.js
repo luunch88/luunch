@@ -54,14 +54,24 @@ export default async function handler(req, res) {
     todayClose = todayHours.closes;
   }
 
-  // Hämta dagens meny
+  // Hämta dagens rätter (flera möjliga)
   const today = now.toISOString().split('T')[0];
-  const { data: menu } = await supabase
+  const { data: dishes } = await supabase
     .from('menus')
     .select('description, price')
     .eq('restaurant_id', restaurant.id)
-    .eq('date', today)
-    .single();
+    .eq('date', today);
+
+  return res.status(200).json({
+    claimed: true,
+    verified: restaurant.verified,
+    phone: restaurant.phone,
+    is_open_now: isOpenNow,
+    today_opens: todayOpen,
+    today_closes: todayClose,
+    dishes: dishes || []
+  });
+}
 
   return res.status(200).json({
     claimed: true,
