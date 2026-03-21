@@ -101,6 +101,16 @@ header {
 .hours-toggle.on::after { transform:translateX(16px); }
 
 /* Logout */
+.dish-form { margin-bottom: 4px; }
+.dish-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.dish-item { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; animation: fadeUp 0.2s ease; }
+.dish-item-info { flex: 1; min-width: 0; }
+.dish-item-name { font-size: 0.85rem; font-weight: 500; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dish-item-price { font-size: 0.75rem; color: var(--accent); font-weight: 600; }
+.dish-item-delete { background: transparent; border: 1px solid var(--border); border-radius: 8px; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 0.9rem; color: var(--ink2); flex-shrink: 0; transition: border-color 0.15s, color 0.15s; }
+.dish-item-delete:hover { border-color: var(--red); color: var(--red); }
+.dishes-empty { font-size: 0.8rem; color: var(--ink2); text-align: center; padding: 14px; background: var(--surface2); border: 1px dashed var(--border); border-radius: var(--radius-sm); margin-bottom: 14px; }
+
 .btn-logout { width: 100%; background: transparent; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; font-size: 0.82rem; color: var(--ink2); cursor: pointer; font-family: 'Plus Jakarta Sans', sans-serif; margin-top: 8px; }
 
 .divider { height: 1px; background: var(--border); margin: 20px 0; }
@@ -145,15 +155,14 @@ header {
       <div class="section-card-title">🍽️ Dagens meny</div>
       <div class="section-status missing" id="menuStatus">Ej tillagd</div>
     </div>
-    <div class="menu-preview" id="menuPreview" style="display:none">
-      <div class="menu-preview-label">Aktuell meny</div>
-      <div class="menu-preview-text" id="menuPreviewText"></div>
+    <div id="dishesList"></div>
+    <div class="dish-form" id="dishForm">
+      <label class="form-label">Maträtt</label>
+      <input class="form-input" id="dishDesc" type="text" placeholder="T.ex. Köttbullar med potatismos och lingon">
+      <label class="form-label">Pris (kr)</label>
+      <input class="form-input" id="dishPrice" type="number" placeholder="125">
+      <button class="btn-primary" onclick="addDish()">+ Lägg till rätt</button>
     </div>
-    <label class="form-label">Beskriv dagens lunch</label>
-    <textarea class="form-input" id="menuDesc" rows="3" placeholder="T.ex. Köttbullar med potatismos, gräddsås och lingon"></textarea>
-    <label class="form-label">Pris (kr)</label>
-    <input class="form-input" id="menuPrice" type="number" placeholder="125">
-    <button class="btn-primary" onclick="saveMenu()">Spara dagens meny</button>
     <div id="menuMsg"></div>
   </div>
 
@@ -177,7 +186,7 @@ header {
 // ── Supabase init ──
 // Dessa värden är publika (anon key) — säkert att ha i frontend
 const SUPABASE_URL = 'https://thibluvsuufpgxkcqewb.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRoaWJsdXZzdXVmcGd4a2NxZXdiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQwNDE4NjYsImV4cCI6MjA4OTYxNzg2Nn0.gHkkBI-2ZnaNbPNSsP4GHZkKK7uc5Q9wbuG948oaQe0';
+const SUPABASE_ANON_KEY = 'SUPABASE_ANON_KEY_HERE'; // Byt ut mot din anon key
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const days = ['Måndag','Tisdag','Onsdag','Torsdag','Fredag','Lördag','Söndag'];
@@ -263,23 +272,17 @@ async function loadDashboard(email) {
   document.getElementById('dashName').textContent = restaurant.name;
   document.getElementById('dashSub').textContent = restaurant.address || 'Uppdatera din info nedan';
 
-  // Hämta dagens meny
+  // Hämta dagens rätter
   const today = new Date().toISOString().split('T')[0];
-  const { data: menu } = await sb
+  const { data: dishes } = await sb
     .from('menus')
-    .select('*')
+    .select('description, price')
     .eq('restaurant_id', restaurant.id)
     .eq('date', today)
-    .single();
+    .order('created_at');
 
-  if (menu) {
-    document.getElementById('menuDesc').value = menu.description || '';
-    document.getElementById('menuPrice').value = menu.price || '';
-    document.getElementById('menuPreviewText').textContent = menu.description + (menu.price ? ` — ${menu.price} kr` : '');
-    document.getElementById('menuPreview').style.display = 'block';
-    document.getElementById('menuStatus').textContent = 'Tillagd ✓';
-    document.getElementById('menuStatus').className = 'section-status set';
-  }
+  todayDishes = dishes || [];
+  renderDishes();
 
   // Hämta öppettider
   const { data: hours } = await sb
@@ -299,30 +302,61 @@ async function loadDashboard(email) {
   document.getElementById('pageDash').classList.add('active');
 }
 
-// ── Save menu ──
-async function saveMenu() {
-  if (!currentRestaurant) return;
-  const desc = document.getElementById('menuDesc').value.trim();
-  const price = parseInt(document.getElementById('menuPrice').value) || null;
-  if (!desc) { showMsg('menuMsg', 'Ange en beskrivning av dagens meny.', 'error'); return; }
+// ── Dishes state ──
+let todayDishes = [];
+
+function renderDishes() {
+  const list = document.getElementById('dishesList');
+  if (todayDishes.length === 0) {
+    list.innerHTML = `<div class="dishes-empty">Inga rätter tillagda ännu</div>`;
+    document.getElementById('menuStatus').textContent = 'Ej tillagd';
+    document.getElementById('menuStatus').className = 'section-status missing';
+    return;
+  }
+  list.innerHTML = `<div class="dish-list">${todayDishes.map((d,i) => `
+    <div class="dish-item">
+      <div class="dish-item-info">
+        <div class="dish-item-name">${d.description}</div>
+        ${d.price ? `<div class="dish-item-price">${d.price} kr</div>` : ''}
+      </div>
+      <button class="dish-item-delete" onclick="deleteDish(${i})">✕</button>
+    </div>`).join('')}</div>`;
+  document.getElementById('menuStatus').textContent = `${todayDishes.length} rätt${todayDishes.length>1?'er':''}`;
+  document.getElementById('menuStatus').className = 'section-status set';
+}
+
+async function addDish() {
+  const desc = document.getElementById('dishDesc').value.trim();
+  const price = parseInt(document.getElementById('dishPrice').value) || null;
+  if (!desc) { showMsg('menuMsg', 'Ange en beskrivning.', 'error'); return; }
 
   const today = new Date().toISOString().split('T')[0];
-  const { error } = await sb.from('menus').upsert({
+  const { error } = await sb.from('menus').insert({
     restaurant_id: currentRestaurant.id,
     date: today,
     description: desc,
     price
-  }, { onConflict: 'restaurant_id,date' });
+  });
 
-  if (error) {
-    showMsg('menuMsg', 'Fel: ' + error.message, 'error');
-  } else {
-    document.getElementById('menuPreviewText').textContent = desc + (price ? ` — ${price} kr` : '');
-    document.getElementById('menuPreview').style.display = 'block';
-    document.getElementById('menuStatus').textContent = 'Tillagd ✓';
-    document.getElementById('menuStatus').className = 'section-status set';
-    showMsg('menuMsg', '✓ Menyn är sparad och visas på luunch.se!', 'success');
-  }
+  if (error) { showMsg('menuMsg', 'Fel: ' + error.message, 'error'); return; }
+
+  todayDishes.push({ description: desc, price });
+  document.getElementById('dishDesc').value = '';
+  document.getElementById('dishPrice').value = '';
+  renderDishes();
+  showMsg('menuMsg', '✓ Rätt tillagd!', 'success');
+}
+
+async function deleteDish(index) {
+  const dish = todayDishes[index];
+  const today = new Date().toISOString().split('T')[0];
+  await sb.from('menus')
+    .delete()
+    .eq('restaurant_id', currentRestaurant.id)
+    .eq('date', today)
+    .eq('description', dish.description);
+  todayDishes.splice(index, 1);
+  renderDishes();
 }
 
 // ── Save hours ──
