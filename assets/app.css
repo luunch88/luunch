@@ -83,6 +83,7 @@ header {
 
 .error-box { margin: 0 20px 14px; background: rgba(224,82,82,0.08); border: 1px solid rgba(224,82,82,0.25); border-radius: var(--radius-sm); padding: 13px 15px; font-size: 0.83rem; color: #F08080; line-height: 1.5; display: none; }
 .error-box.show { display: block; }
+.error-box.info { background: rgba(242,237,228,0.06); border-color: var(--border); color: var(--ink2); }
 
 .section-header { display: none; align-items: center; justify-content: space-between; padding: 0 20px 12px; }
 .section-title { font-family: 'Playfair Display', serif; font-size: 1.05rem; font-weight: 700; }
