@@ -47,5 +47,36 @@
     return filterRx[filter]?.test(haystack) ?? true;
   }
 
-  window.LuunchRestaurants = { getEmoji, getTypeLabel, matchFilter };
+  function sortByDistance(restaurants) {
+    return [...restaurants].sort((a, b) => {
+      const aDist = Number.isFinite(Number(a.distance_m)) ? Number(a.distance_m) : Number.MAX_SAFE_INTEGER;
+      const bDist = Number.isFinite(Number(b.distance_m)) ? Number(b.distance_m) : Number.MAX_SAFE_INTEGER;
+      return aDist - bDist;
+    });
+  }
+
+  function filterRestaurants(restaurants, filters = {}) {
+    const {
+      category = 'alla',
+      maxDistanceMeters = 800,
+      openNow = false
+    } = filters;
+
+    return sortByDistance(restaurants).filter(restaurant => {
+      const distance = Number(restaurant.distance_m);
+      const withinDistance = !Number.isFinite(maxDistanceMeters) ||
+        (Number.isFinite(distance) && distance <= maxDistanceMeters);
+      const categoryMatches = matchFilter(restaurant, category);
+      const openMatches = !openNow || restaurant.is_open_now !== false;
+      return withinDistance && categoryMatches && openMatches;
+    });
+  }
+
+  window.LuunchRestaurants = {
+    getEmoji,
+    getTypeLabel,
+    matchFilter,
+    filterRestaurants,
+    sortByDistance
+  };
 })();
