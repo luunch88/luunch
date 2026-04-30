@@ -5,13 +5,31 @@ const TTL_MS = 6 * 60 * 60 * 1000;
 const GRID_SIZE = 0.005;
 const MAX_RESULTS = 30;
 const CACHE_VERSION = 1;
+const OVERPASS_TIMEOUT_MS = 12000;
 
 const memoryCache = globalThis.__luunchNearbyCache || new Map();
 globalThis.__luunchNearbyCache = memoryCache;
 
-const supabase = process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY
-  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
-  : null;
+let supabase = null;
+try {
+  supabase = process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY
+    ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+    : null;
+} catch (e) {
+  console.error('[nearby] Supabase init error', {
+    message: e.message,
+    stack: e.stack,
+    hasSupabaseUrl: Boolean(process.env.SUPABASE_URL),
+    hasSupabaseAnonKey: Boolean(process.env.SUPABASE_ANON_KEY)
+  });
+}
+
+if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
+  console.warn('[nearby] Supabase env saknas. Kör utan DB-merge och persistent cache.', {
+    hasSupabaseUrl: Boolean(process.env.SUPABASE_URL),
+    hasSupabaseAnonKey: Boolean(process.env.SUPABASE_ANON_KEY)
+  });
+}
 
 const filterRx = {
   asiatiskt: /kines|japan|asian|wok|thai|vietnam|korea|noodle|ramen/i,
@@ -140,13 +158,31 @@ async function writeDbSnapshot(cacheKey, grid, category, payload) {
 
 async function fetchOverpass(lat, lon) {
   const q = `[out:json][timeout:20];(node["amenity"~"restaurant|cafe|fast_food|bar|bakery|pub"](around:800,${lat},${lon});way["amenity"~"restaurant|cafe|fast_food|bar|bakery|pub"](around:800,${lat},${lon}););out center tags;`;
-  const res = await fetch('https://overpass-api.de/api/interpreter', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
-    body: 'data=' + encodeURIComponent(q)
-  });
-  if (!res.ok) throw new Error('Overpass request failed');
-  return (await res.json()).elements || [];
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), OVERPASS_TIMEOUT_MS);
+
+  try {
+    const res = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+      body: 'data=' + encodeURIComponent(q),
+      signal: controller.signal
+    });
+
+    if (!res.ok) {
+      throw new Error(`Overpass svarade med HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    return data.elements || [];
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      throw new Error(`Overpass timeout efter ${OVERPASS_TIMEOUT_MS}ms`);
+    }
+    throw new Error(`Overpass-fel: ${e.message}`);
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function getClaimedData(osmIds) {
@@ -250,40 +286,75 @@ async function buildPayload(lat, lon, category) {
 }
 
 export default async function handler(req, res) {
-  if (!applyCors(req, res, 'GET, OPTIONS')) {
-    return res.status(403).json({ error: 'Origin not allowed' });
-  }
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
-
-  const lat = Number(req.query.lat);
-  const lon = Number(req.query.lon);
-  const category = String(req.query.category || 'alla').toLowerCase();
-
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-    return res.status(400).json({ error: 'lat och lon krävs' });
-  }
-
-  const grid = gridKey(lat, lon);
-  const cacheKey = `${CACHE_VERSION}:${grid}:${category}`;
-  const memoryHit = memoryCache.get(cacheKey);
-
-  if (memoryHit && memoryHit.expiresAt > Date.now()) {
-    return res.status(200).json({ ...memoryHit.payload, source: 'cache' });
-  }
-
-  const dbHit = await readDbSnapshot(cacheKey);
-  if (dbHit) {
-    memoryCache.set(cacheKey, { payload: dbHit, expiresAt: Date.now() + TTL_MS });
-    return res.status(200).json(dbHit);
-  }
-
   try {
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+
+    if (!applyCors(req, res, 'GET, OPTIONS')) {
+      return res.status(403).json({ ok: false, error: 'Origin not allowed' });
+    }
+
+    if (req.method === 'OPTIONS') {
+      return res.status(200).json({ ok: true });
+    }
+
+    if (req.method !== 'GET') {
+      return res.status(405).json({ ok: false, error: 'Method not allowed' });
+    }
+
+    const rawLat = req.query?.lat;
+    const rawLon = req.query?.lon;
+    const rawCategory = req.query?.category;
+    const lat = Number(rawLat);
+    const lon = Number(rawLon);
+    const category = String(rawCategory || 'alla').toLowerCase();
+
+    if (rawLat === undefined || rawLat === '') {
+      return res.status(400).json({ ok: false, error: 'Query-parametern lat saknas.' });
+    }
+
+    if (rawLon === undefined || rawLon === '') {
+      return res.status(400).json({ ok: false, error: 'Query-parametern lon saknas.' });
+    }
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return res.status(400).json({
+        ok: false,
+        error: 'lat och lon måste vara nummer.',
+        received: { lat: rawLat, lon: rawLon }
+      });
+    }
+
+    const grid = gridKey(lat, lon);
+    const cacheKey = `${CACHE_VERSION}:${grid}:${category}`;
+    const memoryHit = memoryCache.get(cacheKey);
+
+    if (memoryHit && memoryHit.expiresAt > Date.now()) {
+      return res.status(200).json({ ok: true, ...memoryHit.payload, source: 'cache' });
+    }
+
+    const dbHit = await readDbSnapshot(cacheKey);
+    if (dbHit) {
+      memoryCache.set(cacheKey, { payload: dbHit, expiresAt: Date.now() + TTL_MS });
+      return res.status(200).json({ ok: true, ...dbHit, source: 'cache' });
+    }
+
     const payload = await buildPayload(lat, lon, category);
     memoryCache.set(cacheKey, { payload, expiresAt: Date.now() + TTL_MS });
     await writeDbSnapshot(cacheKey, grid, category, payload);
-    return res.status(200).json(payload);
+    return res.status(200).json({ ok: true, ...payload });
   } catch (e) {
-    return res.status(502).json({ error: 'Kunde inte hämta restauranger just nu.' });
+    console.error('[nearby] Handler error', {
+      message: e.message,
+      stack: e.stack,
+      query: req.query,
+      method: req.method,
+      hasSupabaseUrl: Boolean(process.env.SUPABASE_URL),
+      hasSupabaseAnonKey: Boolean(process.env.SUPABASE_ANON_KEY)
+    });
+
+    return res.status(502).json({
+      ok: false,
+      error: e.message || 'Kunde inte hämta restauranger just nu.'
+    });
   }
 }
