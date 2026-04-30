@@ -1,11 +1,15 @@
-let allPlaces = [];
+let allRestaurants = [];
+let filteredRestaurants = [];
+let fallbackRestaurants = [];
 let activeFilter = 'alla';
 let userLat = null;
 let userLon = null;
+const MAX_DISTANCE_METERS = 800;
+const FALLBACK_LIMIT = 3;
 
-const { escapeHtml, escapeAttr, showToast, setStatus, showError, hideError } = window.LuunchUI;
+const { escapeHtml, escapeAttr, showToast, setStatus, showError, showInfo, hideNotice } = window.LuunchUI;
 const { distLabel } = window.LuunchGeo;
-const { matchFilter } = window.LuunchRestaurants;
+const { filterRestaurants, sortByDistance } = window.LuunchRestaurants;
 
 function updateClock() {
   const now = new Date();
@@ -120,23 +124,68 @@ function renderEmpty(container, title, text, emoji = '😔') {
     </div>`;
 }
 
-function renderCards(places) {
+function renderList(restaurants) {
   const container = document.getElementById('results');
   const header = document.getElementById('sectionHeader');
   const countEl = document.getElementById('sectionCount');
   container.innerHTML = '';
+  header.style.display = 'flex';
+  countEl.textContent = restaurants.length + ' ställen';
+  restaurants.forEach(place => container.appendChild(buildCard(place)));
+}
 
-  const filtered = places.filter(p => matchFilter(p, activeFilter));
-  if (filtered.length === 0) {
-    header.style.display = 'none';
-    renderEmpty(container, 'Inga träffar', 'Inga ställen matchade filtret. Prova ett annat alternativ.');
+function categoryLabel(category) {
+  return {
+    alla: 'ställen',
+    asiatiskt: 'asiatiska ställen',
+    burgare: 'burgarställen',
+    pizza: 'pizzaställen',
+    sushi: 'sushiställen',
+    vegetariskt: 'vegetariska ställen',
+    thai: 'thaiställen',
+    indiskt: 'indiska ställen'
+  }[category] || 'ställen';
+}
+
+function countText(count, category) {
+  const label = categoryLabel(category);
+  return `${count} ${label} nära dig`;
+}
+
+function renderRestaurantState() {
+  const container = document.getElementById('results');
+  const header = document.getElementById('sectionHeader');
+
+  filteredRestaurants = filterRestaurants(allRestaurants, {
+    category: activeFilter,
+    maxDistanceMeters: MAX_DISTANCE_METERS
+  });
+
+  if (filteredRestaurants.length > 0) {
+    fallbackRestaurants = [];
+    hideNotice();
+    renderList(filteredRestaurants);
+    setStatus(countText(filteredRestaurants.length, activeFilter), 'live');
     return;
   }
 
-  header.style.display = 'flex';
-  countEl.textContent = filtered.length + ' ställen';
-  filtered.forEach(place => container.appendChild(buildCard(place)));
-  setStatus(`${filtered.length} ställen hittade nära dig`, 'live');
+  if (allRestaurants.length > 0) {
+    fallbackRestaurants = sortByDistance(allRestaurants).slice(0, FALLBACK_LIMIT);
+    const filterText = activeFilter === 'alla' ? 'restauranger' : categoryLabel(activeFilter);
+    const message = `Inga ${filterText} inom ${MAX_DISTANCE_METERS} m – visar ${fallbackRestaurants.length} närmaste alternativ.`;
+    showInfo(message);
+    renderList(fallbackRestaurants);
+    setStatus(message, '');
+    return;
+  }
+
+  filteredRestaurants = [];
+  fallbackRestaurants = [];
+  hideNotice();
+  header.style.display = 'none';
+  container.innerHTML = '';
+  renderEmpty(container, 'Inga restauranger hittades', `Vi hittade inga restauranger inom ${MAX_DISTANCE_METERS} meter.`);
+  setStatus('Inga resultat', '');
 }
 
 function toggleFavorite(osmId, name, address, emoji) {
@@ -269,24 +318,21 @@ async function loadNearby() {
   label.textContent = 'Söker restauranger…';
   sub.textContent = 'Kollar vad som är nära';
   setStatus('Söker lunchställen…');
+  hideNotice();
 
-  const payload = await window.LuunchAPI.getNearby({ lat: userLat, lon: userLon, category: activeFilter });
-  allPlaces = payload.restaurants || [];
-  if (allPlaces.length === 0) {
-    showError('Inga restauranger hittades inom 800 meter.');
-    setStatus('Inga resultat', 'err');
-    renderCards([]);
-    return;
-  }
-  renderCards(allPlaces);
-  showToast(`${allPlaces.length} lunchställen nära dig! 🍽️`);
+  const payload = await window.LuunchAPI.getNearby({ lat: userLat, lon: userLon, category: 'alla' });
+  allRestaurants = sortByDistance(payload.restaurants || []);
+  renderRestaurantState();
+  if (allRestaurants.length > 0) showToast(`${allRestaurants.length} lunchställen nära dig! 🍽️`);
 }
 
 async function filterChip(el, type) {
   document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
   el.classList.add('active');
   activeFilter = type;
-  if (userLat && userLon) {
+  if (allRestaurants.length > 0) {
+    renderRestaurantState();
+  } else if (userLat && userLon) {
     try {
       await loadNearby();
     } catch (e) {
@@ -294,7 +340,7 @@ async function filterChip(el, type) {
       setStatus('Anslutningsfel', 'err');
     }
   } else {
-    renderCards(allPlaces);
+    renderRestaurantState();
   }
 }
 
@@ -313,7 +359,7 @@ async function locate() {
   btn.classList.add('loading');
   label.textContent = 'Hämtar din plats…';
   sub.textContent = 'Aktiverar GPS';
-  hideError();
+  hideNotice();
   setStatus('Hämtar position…');
 
   navigator.geolocation.getCurrentPosition(async pos => {
