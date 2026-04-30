@@ -30,12 +30,22 @@
   function showError(msg) {
     const b = document.getElementById('errorBox');
     if (!b) return;
+    b.classList.remove('info');
     b.textContent = msg;
     b.classList.add('show');
   }
 
-  function hideError() {
-    document.getElementById('errorBox')?.classList.remove('show');
+  function showInfo(msg) {
+    const b = document.getElementById('errorBox');
+    if (!b) return;
+    b.textContent = msg;
+    b.classList.add('show', 'info');
+  }
+
+  function hideNotice() {
+    const b = document.getElementById('errorBox');
+    if (!b) return;
+    b.classList.remove('show', 'info');
   }
 
   window.LuunchUI = {
@@ -44,6 +54,8 @@
     showToast,
     setStatus,
     showError,
-    hideError
+    showInfo,
+    hideError: hideNotice,
+    hideNotice
   };
 })();
