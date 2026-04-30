@@ -5,7 +5,11 @@ const TTL_MS = 6 * 60 * 60 * 1000;
 const GRID_SIZE = 0.005;
 const MAX_RESULTS = 30;
 const CACHE_VERSION = 1;
-const OVERPASS_TIMEOUT_MS = 12000;
+const OVERPASS_TIMEOUT_MS = 8000;
+const OVERPASS_ENDPOINTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter'
+];
 
 const memoryCache = globalThis.__luunchNearbyCache || new Map();
 globalThis.__luunchNearbyCache = memoryCache;
@@ -158,31 +162,47 @@ async function writeDbSnapshot(cacheKey, grid, category, payload) {
 
 async function fetchOverpass(lat, lon) {
   const q = `[out:json][timeout:20];(node["amenity"~"restaurant|cafe|fast_food|bar|bakery|pub"](around:800,${lat},${lon});way["amenity"~"restaurant|cafe|fast_food|bar|bakery|pub"](around:800,${lat},${lon}););out center tags;`;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), OVERPASS_TIMEOUT_MS);
+  const errors = [];
 
-  try {
-    const res = await fetch('https://overpass-api.de/api/interpreter', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
-      body: 'data=' + encodeURIComponent(q),
-      signal: controller.signal
-    });
+  for (const endpoint of OVERPASS_ENDPOINTS) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), OVERPASS_TIMEOUT_MS);
 
-    if (!res.ok) {
-      throw new Error(`Overpass svarade med HTTP ${res.status}`);
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+          'User-Agent': 'luunch.se/1.0 contact@luunch.se'
+        },
+        body: 'data=' + encodeURIComponent(q),
+        signal: controller.signal
+      });
+
+      if (!res.ok) {
+        throw new Error(`${endpoint} svarade med HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      return data.elements || [];
+    } catch (e) {
+      const message = e.name === 'AbortError'
+        ? `${endpoint} timeout efter ${OVERPASS_TIMEOUT_MS}ms`
+        : e.message;
+      errors.push(message);
+      console.error('[nearby] Overpass endpoint failed', {
+        endpoint,
+        message,
+        lat,
+        lon
+      });
+    } finally {
+      clearTimeout(timeout);
     }
-
-    const data = await res.json();
-    return data.elements || [];
-  } catch (e) {
-    if (e.name === 'AbortError') {
-      throw new Error(`Overpass timeout efter ${OVERPASS_TIMEOUT_MS}ms`);
-    }
-    throw new Error(`Overpass-fel: ${e.message}`);
-  } finally {
-    clearTimeout(timeout);
   }
+
+  throw new Error(`Overpass-fel: ${errors.join(' | ')}`);
 }
 
 async function getClaimedData(osmIds) {
@@ -352,7 +372,7 @@ export default async function handler(req, res) {
       hasSupabaseAnonKey: Boolean(process.env.SUPABASE_ANON_KEY)
     });
 
-    return res.status(502).json({
+    return res.status(200).json({
       ok: false,
       error: e.message || 'Kunde inte hämta restauranger just nu.'
     });
