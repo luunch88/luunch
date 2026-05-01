@@ -49,14 +49,17 @@ function buildCard(place) {
   const typeLabel = place.type_label || place.category || 'Restaurang';
   const address = place.address || '';
   const dishes = Array.isArray(place.dishes) ? place.dishes : [];
-  const todayHours = place.today_hours || (place.today_opens && place.today_closes ? `${place.today_opens}-${place.today_closes}` : null);
-  const openStatus = place.open_status || 'unknown';
+  const hasOwnHours = (place.claimed === true || place.verified === true) && place.has_luunch_hours === true;
+  const todayHours = hasOwnHours
+    ? place.today_hours || (place.today_opens && place.today_closes ? `${place.today_opens}-${place.today_closes}` : null)
+    : null;
+  const openStatus = hasOwnHours ? place.open_status || 'unknown' : 'unknown';
   const claimed = !!place.claimed;
   const mapsUrl = Number.isFinite(lat) && Number.isFinite(lon)
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lat},${lon}`)}`
     : '#';
 
-  const hoursText = todayHours || place.opening_hours_raw || 'Öppettider saknas';
+  const hoursText = todayHours || 'Öppettider saknas';
   const hoursHtml = `<div class="card-today-hours">🕐 ${escapeHtml(hoursText)}</div>`;
 
   const openBadge = openStatus === 'open'
