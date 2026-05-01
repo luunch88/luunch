@@ -59,13 +59,14 @@ function buildCard(place) {
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lat},${lon}`)}`
     : '#';
 
-  const hoursText = todayHours || 'Öppettider saknas';
-  const hoursHtml = `<div class="card-today-hours">🕐 ${escapeHtml(hoursText)}</div>`;
+  const hoursHtml = todayHours
+    ? `<div class="card-today-hours">🕐 ${escapeHtml(todayHours)}</div>`
+    : '';
 
   const openBadge = openStatus === 'open'
-    ? '<span class="badge badge-open">● Öppet nu</span>'
+    ? '<span class="badge badge-open">● Lunch öppet nu</span>'
     : openStatus === 'closed'
-    ? '<span class="badge badge-closed">● Stängt nu</span>'
+    ? '<span class="badge badge-closed">● Lunch stängt</span>'
     : '<span class="badge badge-type">● Öppettider saknas</span>';
 
   const menuHtml = dishes.length > 0
@@ -73,7 +74,7 @@ function buildCard(place) {
         <div class="card-menu-label">Dagens lunch</div>
         ${dishes.map(d => `<div class="card-menu-text">• ${escapeHtml(d.description)}${d.price ? ` — <strong>${escapeHtml(d.price)} kr</strong>` : ''}</div>`).join('')}
       </div>`
-    : '';
+    : '<div class="card-missing">🍽️ Ingen meny tillagd</div>';
 
   const card = document.createElement('div');
   card.className = 'card';
@@ -93,16 +94,12 @@ function buildCard(place) {
     <div class="card-body">
       ${menuHtml}
       ${hoursHtml}
-      <div class="card-missing-wrap">
-        ${dishes.length === 0 ? '<span class="card-missing">🍽️ Ingen meny tillagd</span>' : ''}
-        ${openStatus === 'unknown' ? '<span class="card-missing">🕐 Öppettider saknas</span>' : ''}
-      </div>
       <div class="card-footer">
         <div class="card-address">${escapeHtml(address || 'Se på karta')}</div>
         <button class="btn-fav" data-fav="${escapeAttr(osmId)}" type="button">${isFavorite(osmId) ? '❤️' : '🤍'}</button>
         <a href="${escapeAttr(mapsUrl)}" target="_blank" rel="noopener" class="btn-maps">Vägbeskrivning →</a>
       </div>
-      ${!claimed ? '<button class="btn-claim" type="button">🏪 Är detta din restaurang?</button>' : ''}
+      ${!claimed ? '<button class="btn-claim" type="button">🏪 Är detta din restaurang? Lägg till lunchmeny</button>' : ''}
     </div>`;
 
   card.querySelector('.btn-fav')?.addEventListener('click', event => {
