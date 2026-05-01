@@ -39,6 +39,25 @@ function isFavorite(osmId) {
   return getFavorites().some(f => f.osmId === osmId);
 }
 
+function createEl(tag, className, text) {
+  const el = document.createElement(tag);
+  if (className) el.className = className;
+  if (text !== undefined && text !== null) el.textContent = text;
+  return el;
+}
+
+function walkingLabel(distance) {
+  if (!Number.isFinite(distance)) return null;
+  return `ca ${Math.max(1, Math.round(distance / 80))} min promenad`;
+}
+
+function statusBadgeText(openStatus, hasOwnHours) {
+  if (!hasOwnHours) return '⏰ Öppettider saknas';
+  if (openStatus === 'open') return '🍽️ Lunch öppet nu';
+  if (openStatus === 'closed') return '🌙 Lunch stängt';
+  return '⏰ Öppettider saknas';
+}
+
 function buildCard(place) {
   const osmId = place.id || place.osm_id || '';
   const name = place.name || 'Okänt ställe';
@@ -59,48 +78,85 @@ function buildCard(place) {
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lat},${lon}`)}`
     : '#';
 
-  const hoursHtml = todayHours
-    ? `<div class="card-today-hours">🕐 ${escapeHtml(todayHours)}</div>`
-    : '';
-
-  const openBadge = openStatus === 'open'
-    ? '<span class="badge badge-open">● Lunch öppet nu</span>'
-    : openStatus === 'closed'
-    ? '<span class="badge badge-closed">● Lunch stängt</span>'
-    : '<span class="badge badge-type">● Öppettider saknas</span>';
-
-  const menuHtml = dishes.length > 0
-    ? `<div class="card-menu">
-        <div class="card-menu-label">Dagens lunch</div>
-        ${dishes.map(d => `<div class="card-menu-text">• ${escapeHtml(d.description)}${d.price ? ` — <strong>${escapeHtml(d.price)} kr</strong>` : ''}</div>`).join('')}
-      </div>`
-    : '<div class="card-missing">🍽️ Ingen meny tillagd</div>';
-
   const card = document.createElement('div');
   card.className = 'card';
-  card.innerHTML = `
-    <div class="card-top">
-      <div class="card-emoji-box">${escapeHtml(emoji)}</div>
-      <div class="card-top-info">
-        <div class="card-name">${escapeHtml(name)}</div>
-        <div class="card-badges">
-          ${distance !== null ? `<span class="badge badge-dist">${escapeHtml(distLabel(distance))}</span>` : ''}
-          ${openBadge}
-          <span class="badge badge-type">${escapeHtml(typeLabel)}</span>
-          ${claimed ? '<span class="badge badge-claimed">✓ Verifierad</span>' : ''}
-        </div>
-      </div>
-    </div>
-    <div class="card-body">
-      ${menuHtml}
-      ${hoursHtml}
-      <div class="card-footer">
-        <div class="card-address">${escapeHtml(address || 'Se på karta')}</div>
-        <button class="btn-fav" data-fav="${escapeAttr(osmId)}" type="button">${isFavorite(osmId) ? '❤️' : '🤍'}</button>
-        <a href="${escapeAttr(mapsUrl)}" target="_blank" rel="noopener" class="btn-maps">Vägbeskrivning →</a>
-      </div>
-      ${!claimed ? '<button class="btn-claim" type="button">🏪 Är detta din restaurang? Lägg till lunchmeny</button>' : ''}
-    </div>`;
+
+  const top = createEl('div', 'card-top');
+  top.appendChild(createEl('div', 'card-emoji-box', emoji));
+
+  const topInfo = createEl('div', 'card-top-info');
+  topInfo.appendChild(createEl('div', 'card-name', name));
+
+  const badges = createEl('div', 'card-badges');
+  if (distance !== null) {
+    const dist = createEl('span', 'badge badge-dist');
+    const walk = walkingLabel(distance);
+    dist.textContent = walk ? `${distLabel(distance)} · ${walk}` : distLabel(distance);
+    badges.appendChild(dist);
+  }
+
+  const statusClass = openStatus === 'open' && hasOwnHours
+    ? 'badge badge-status badge-open'
+    : openStatus === 'closed' && hasOwnHours
+    ? 'badge badge-status badge-closed'
+    : 'badge badge-status badge-unknown';
+  badges.appendChild(createEl('span', statusClass, statusBadgeText(openStatus, hasOwnHours)));
+  badges.appendChild(createEl('span', 'badge badge-type', typeLabel));
+  if (claimed) badges.appendChild(createEl('span', 'badge badge-claimed', '✓ Verifierad'));
+
+  topInfo.appendChild(badges);
+  top.appendChild(topInfo);
+  card.appendChild(top);
+
+  const body = createEl('div', 'card-body');
+
+  if (dishes.length > 0) {
+    const menu = createEl('div', 'card-menu');
+    menu.appendChild(createEl('div', 'card-menu-label', 'Dagens lunch'));
+    dishes.forEach(dish => {
+      const item = createEl('div', 'card-menu-text');
+      const price = dish.price ? ` — ${dish.price} kr` : '';
+      item.textContent = `• ${dish.description || ''}${price}`;
+      menu.appendChild(item);
+    });
+    body.appendChild(menu);
+  } else {
+    body.appendChild(createEl('div', 'card-missing', '🍽️ Ingen meny tillagd'));
+  }
+
+  if (todayHours) {
+    body.appendChild(createEl('div', 'card-today-hours', `🕐 ${todayHours}`));
+  }
+
+  const footer = createEl('div', 'card-footer');
+  if (address) {
+    footer.appendChild(createEl('div', 'card-address', address));
+  } else {
+    const spacer = createEl('div', 'card-address card-address-empty', '');
+    footer.appendChild(spacer);
+  }
+
+  const actions = createEl('div', 'card-actions');
+  const favButton = createEl('button', 'btn-fav' + (isFavorite(osmId) ? ' saved' : ''), isFavorite(osmId) ? '❤️' : '♡');
+  favButton.type = 'button';
+  favButton.dataset.fav = osmId;
+  actions.appendChild(favButton);
+
+  const mapsLink = createEl('a', 'btn-maps', 'Vägbeskrivning →');
+  mapsLink.href = mapsUrl;
+  mapsLink.target = '_blank';
+  mapsLink.rel = 'noopener';
+  actions.appendChild(mapsLink);
+  footer.appendChild(actions);
+  body.appendChild(footer);
+
+  if (!claimed) {
+    const claimButton = createEl('button', 'btn-claim', 'Är detta din restaurang? Lägg till meny gratis');
+    claimButton.type = 'button';
+    body.appendChild(claimButton);
+  }
+
+  card.appendChild(body);
 
   card.querySelector('.btn-fav')?.addEventListener('click', event => {
     event.stopPropagation();
@@ -220,7 +276,11 @@ function toggleFavorite(osmId, name, address, emoji) {
   }
   saveFavorites(favs);
   const btn = [...document.querySelectorAll('[data-fav]')].find(item => item.dataset.fav === osmId);
-  if (btn) btn.textContent = isFavorite(osmId) ? '❤️' : '🤍';
+  if (btn) {
+    const saved = isFavorite(osmId);
+    btn.textContent = saved ? '❤️' : '♡';
+    btn.classList.toggle('saved', saved);
+  }
 }
 
 function showSaved() {
