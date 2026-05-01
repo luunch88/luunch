@@ -10,6 +10,7 @@ let currentRestaurant = null;
 let pendingClaim = null;
 let claimInProgress = false;
 let currentUser = null;
+let currentSession = null;
 const RESTAURANT_TYPES = new Set([
   'Pizza',
   'Sushi',
@@ -254,6 +255,7 @@ async function checkSession() {
 
 async function handleSession(session, msgId = 'loginMsg') {
   try {
+    currentSession = session;
     if (pendingClaim) {
       await submitClaimRequest(session, pendingClaim);
       showMsg(msgId, 'âœ“ Tack! Din ansÃ¶kan Ã¤r skickad. Vi granskar den manuellt och Ã¥terkommer.', 'success');
@@ -263,6 +265,8 @@ async function handleSession(session, msgId = 'loginMsg') {
       pendingClaim = null;
       return;
     }
+    const isAdmin = await loadAdminClaims({ silent: true });
+    if (isAdmin) return;
     await loadDashboard(session.user);
   } catch (e) {
     showMsg(msgId, e.message, 'error');
@@ -321,6 +325,185 @@ function renderPendingDetails(claim) {
     row.append(labelEl, valueEl);
     container.appendChild(row);
   });
+}
+
+async function adminRequest(path, options = {}) {
+  const { data: { session } } = await sb.auth.getSession();
+  currentSession = session;
+  if (!session) throw new Error('Admin-inloggning krävs.');
+
+  const res = await fetch(path, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session.access_token}`,
+      ...(options.headers || {})
+    }
+  });
+  const data = await res.json();
+  if (!res.ok || data.ok === false) {
+    const error = new Error(data.error || 'Admin-åtgärden misslyckades.');
+    error.status = res.status;
+    throw error;
+  }
+  return data;
+}
+
+async function loadAdminClaims(options = {}) {
+  const silent = Boolean(options.silent);
+  try {
+    const data = await adminRequest('/api/admin/claims');
+    renderAdminClaims(data.claims || []);
+    showPage('pageAdmin');
+    return true;
+  } catch (e) {
+    if (silent && (e.status === 401 || e.status === 403)) return false;
+    showMsg('adminMsg', e.message, 'error');
+    return false;
+  }
+}
+
+function appendAdminField(container, label, value) {
+  if (!value) return;
+  const row = document.createElement('div');
+  row.className = 'readonly-row';
+  const labelEl = document.createElement('div');
+  labelEl.className = 'readonly-label';
+  labelEl.textContent = label;
+  const valueEl = document.createElement('div');
+  valueEl.className = 'readonly-value';
+  valueEl.textContent = value;
+  row.append(labelEl, valueEl);
+  container.appendChild(row);
+}
+
+function renderAdminClaims(claims) {
+  const list = document.getElementById('adminClaimsList');
+  if (!list) return;
+  list.textContent = '';
+
+  if (claims.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'dishes-empty';
+    empty.textContent = 'Inga pending ansökningar just nu.';
+    list.appendChild(empty);
+    return;
+  }
+
+  claims.forEach(claim => {
+    const card = document.createElement('div');
+    card.className = 'admin-claim';
+
+    const title = document.createElement('div');
+    title.className = 'admin-claim-title';
+    title.textContent = claim.restaurant_name || 'Namnlös restaurang';
+
+    const meta = document.createElement('div');
+    meta.className = 'admin-claim-meta';
+    meta.textContent = `${claim.email || 'Ingen e-post'} · ${claim.created_at ? new Date(claim.created_at).toLocaleString('sv-SE') : 'Okänt datum'}`;
+
+    const info = document.createElement('div');
+    info.className = 'admin-claim-grid';
+    appendAdminField(info, 'Adress', [claim.address, claim.postal_code, claim.city].filter(Boolean).join(', '));
+    appendAdminField(info, 'Typ', claim.type);
+    appendAdminField(info, 'Kontaktperson', claim.contact_person);
+    appendAdminField(info, 'Telefon', claim.phone);
+    appendAdminField(info, 'Organisationsnummer', claim.organization_number);
+    appendAdminField(info, 'Meddelande', claim.message);
+    appendAdminField(info, 'User ID', claim.user_id);
+
+    const actions = document.createElement('div');
+    actions.className = 'admin-actions';
+
+    const connectRow = document.createElement('div');
+    connectRow.className = 'admin-action-row';
+    const restaurantInput = document.createElement('input');
+    restaurantInput.className = 'form-input';
+    restaurantInput.placeholder = 'Befintligt restaurant_id';
+    restaurantInput.value = claim.restaurant_id || '';
+    const connectBtn = document.createElement('button');
+    connectBtn.className = 'btn-primary';
+    connectBtn.type = 'button';
+    connectBtn.textContent = 'Godkänn och koppla';
+    connectBtn.addEventListener('click', () => approveClaimExisting(claim.id, restaurantInput.value));
+    connectRow.append(restaurantInput, connectBtn);
+
+    const manualRow = document.createElement('div');
+    manualRow.className = 'admin-action-row manual';
+    const latInput = document.createElement('input');
+    latInput.className = 'form-input';
+    latInput.placeholder = 'Lat';
+    latInput.inputMode = 'decimal';
+    const lonInput = document.createElement('input');
+    lonInput.className = 'form-input';
+    lonInput.placeholder = 'Lon';
+    lonInput.inputMode = 'decimal';
+    const createBtn = document.createElement('button');
+    createBtn.className = 'btn-secondary';
+    createBtn.type = 'button';
+    createBtn.textContent = 'Skapa manuell och godkänn';
+    createBtn.addEventListener('click', () => approveClaimCreate(claim.id, latInput.value, lonInput.value));
+    manualRow.append(latInput, lonInput, createBtn);
+
+    const rejectRow = document.createElement('div');
+    rejectRow.className = 'admin-action-row';
+    const reasonInput = document.createElement('input');
+    reasonInput.className = 'form-input';
+    reasonInput.placeholder = 'Avvisningsorsak (valfri)';
+    const rejectBtn = document.createElement('button');
+    rejectBtn.className = 'btn-secondary';
+    rejectBtn.type = 'button';
+    rejectBtn.textContent = 'Avvisa';
+    rejectBtn.addEventListener('click', () => rejectClaim(claim.id, reasonInput.value));
+    rejectRow.append(reasonInput, rejectBtn);
+
+    actions.append(connectRow, manualRow, rejectRow);
+    card.append(title, meta, info, actions);
+    list.appendChild(card);
+  });
+}
+
+async function approveClaimExisting(claimId, restaurantId) {
+  if (!restaurantId.trim()) {
+    showMsg('adminMsg', 'Ange restaurant_id att koppla till.', 'error');
+    return;
+  }
+  try {
+    await adminRequest('/api/admin/claims/approve', {
+      method: 'POST',
+      body: JSON.stringify({ claim_id: claimId, restaurant_id: restaurantId.trim() })
+    });
+    showMsg('adminMsg', '✓ Ansökan godkänd och kopplad.', 'success');
+    await loadAdminClaims();
+  } catch (e) {
+    showMsg('adminMsg', e.message, 'error');
+  }
+}
+
+async function approveClaimCreate(claimId, lat, lon) {
+  try {
+    await adminRequest('/api/admin/claims/approve-create', {
+      method: 'POST',
+      body: JSON.stringify({ claim_id: claimId, lat: Number(lat), lon: Number(lon) })
+    });
+    showMsg('adminMsg', '✓ Manuell restaurang skapad och godkänd.', 'success');
+    await loadAdminClaims();
+  } catch (e) {
+    showMsg('adminMsg', e.message, 'error');
+  }
+}
+
+async function rejectClaim(claimId, reason) {
+  try {
+    await adminRequest('/api/admin/claims/reject', {
+      method: 'POST',
+      body: JSON.stringify({ claim_id: claimId, reason: reason.trim() || null })
+    });
+    showMsg('adminMsg', '✓ Ansökan avvisad.', 'success');
+    await loadAdminClaims();
+  } catch (e) {
+    showMsg('adminMsg', e.message, 'error');
+  }
 }
 
 // â”€â”€ Load dashboard â”€â”€
@@ -469,6 +652,7 @@ async function logout() {
   await sb.auth.signOut();
   currentRestaurant = null;
   currentUser = null;
+  currentSession = null;
   showPage('pageLogin');
 }
 
