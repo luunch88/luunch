@@ -3,6 +3,7 @@ import { applyCors } from './_cors.js';
 
 const TTL_MS = 6 * 60 * 60 * 1000;
 const GRID_SIZE = 0.005;
+const DEFAULT_RADIUS_METERS = 800;
 const MAX_RESULTS = 30;
 const CACHE_VERSION = 3;
 const OVERPASS_TIMEOUT_MS = 8000;
@@ -16,21 +17,24 @@ globalThis.__luunchNearbyCache = memoryCache;
 
 let supabase = null;
 try {
-  supabase = process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY
-    ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+  const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY;
+  supabase = process.env.SUPABASE_URL && supabaseKey
+    ? createClient(process.env.SUPABASE_URL, supabaseKey)
     : null;
 } catch (e) {
   console.error('[nearby] Supabase init error', {
     message: e.message,
     stack: e.stack,
     hasSupabaseUrl: Boolean(process.env.SUPABASE_URL),
+    hasSupabaseServiceKey: Boolean(process.env.SUPABASE_SERVICE_KEY),
     hasSupabaseAnonKey: Boolean(process.env.SUPABASE_ANON_KEY)
   });
 }
 
-if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
-  console.warn('[nearby] Supabase env saknas. Kör utan DB-merge och persistent cache.', {
+if (!supabase) {
+  console.warn('[nearby] Supabase env saknas eller kunde inte initieras. Kör med in-memory cache fallback.', {
     hasSupabaseUrl: Boolean(process.env.SUPABASE_URL),
+    hasSupabaseServiceKey: Boolean(process.env.SUPABASE_SERVICE_KEY),
     hasSupabaseAnonKey: Boolean(process.env.SUPABASE_ANON_KEY)
   });
 }
@@ -51,6 +55,10 @@ function roundCoord(value) {
 
 function gridKey(lat, lon) {
   return `${roundCoord(lat)},${roundCoord(lon)}`;
+}
+
+function cacheKeyFor(grid, category, radiusMeters) {
+  return `nearby:v${CACHE_VERSION}:${grid}:${category}:${radiusMeters}`;
 }
 
 function haversine(lat1, lon1, lat2, lon2) {
@@ -222,19 +230,34 @@ async function fetchOpeningHours(restaurantIds, dayIndex) {
   return fallback.data || [];
 }
 
+function isFreshSnapshot(snapshot) {
+  return snapshot?.expiresAt && snapshot.expiresAt > Date.now();
+}
+
 async function readDbSnapshot(cacheKey) {
   if (!supabase) return null;
-  const now = new Date().toISOString();
   try {
     const { data, error } = await supabase
       .from('place_snapshots')
-      .select('payload, cached_at, expires_at')
+      .select('payload_json, created_at, updated_at, expires_at')
       .eq('cache_key', cacheKey)
-      .gt('expires_at', now)
       .single();
-    if (error || !data?.payload) return null;
-    return { ...data.payload, cached_at: data.cached_at, source: 'cache' };
+    if (error || !data?.payload_json) {
+      if (error && error.code !== 'PGRST116') {
+        console.error('[nearby] DB cache read failed', { cacheKey, message: error.message });
+      }
+      return null;
+    }
+
+    return {
+      payload: {
+        ...data.payload_json,
+        cached_at: data.payload_json.cached_at || data.updated_at || data.created_at
+      },
+      expiresAt: new Date(data.expires_at).getTime()
+    };
   } catch (e) {
+    console.error('[nearby] DB cache read crashed', { cacheKey, message: e.message });
     return null;
   }
 }
@@ -246,13 +269,14 @@ async function writeDbSnapshot(cacheKey, grid, category, payload) {
       cache_key: cacheKey,
       grid_key: grid,
       category,
-      payload,
-      cached_at: payload.cached_at,
+      payload_json: payload,
       expires_at: new Date(Date.now() + TTL_MS).toISOString(),
-      version: CACHE_VERSION
+      updated_at: new Date().toISOString()
+    }, {
+      onConflict: 'cache_key'
     });
   } catch (e) {
-    // Optional DB cache. In-memory cache still keeps the endpoint working.
+    console.error('[nearby] DB cache write failed', { cacheKey, message: e.message });
   }
 }
 
@@ -369,7 +393,7 @@ async function getClaimedData(osmIds) {
   return claimed;
 }
 
-async function buildPayload(lat, lon, category) {
+async function buildPayload(lat, lon, category, radiusMeters) {
   const elements = await fetchOverpass(lat, lon);
   const { currentTime } = swedenNowParts();
   const baseRestaurants = elements
@@ -412,6 +436,7 @@ async function buildPayload(lat, lon, category) {
   const claimedData = await getClaimedData(baseRestaurants.map(r => r.osm_id));
   const restaurants = baseRestaurants
     .map(restaurant => ({ ...restaurant, ...(claimedData.get(restaurant.osm_id) || {}) }))
+    .filter(restaurant => restaurant.distance_m <= radiusMeters)
     .filter(restaurant => matchesCategory(restaurant, category))
     .sort((a, b) => a.distance_m - b.distance_m)
     .slice(0, MAX_RESULTS);
@@ -442,9 +467,13 @@ export default async function handler(req, res) {
     const rawLat = req.query?.lat;
     const rawLon = req.query?.lon;
     const rawCategory = req.query?.category;
+    const rawRadius = req.query?.radius;
     const lat = Number(rawLat);
     const lon = Number(rawLon);
     const category = String(rawCategory || 'alla').toLowerCase();
+    const radiusMeters = Number.isFinite(Number(rawRadius)) && Number(rawRadius) > 0
+      ? Math.min(Number(rawRadius), 3000)
+      : DEFAULT_RADIUS_METERS;
 
     if (rawLat === undefined || rawLat === '') {
       return res.status(400).json({ ok: false, error: 'Query-parametern lat saknas.' });
@@ -463,23 +492,50 @@ export default async function handler(req, res) {
     }
 
     const grid = gridKey(lat, lon);
-    const cacheKey = `${CACHE_VERSION}:${grid}:${category}`;
+    const cacheKey = cacheKeyFor(grid, category, radiusMeters);
     const memoryHit = memoryCache.get(cacheKey);
 
-    if (memoryHit && memoryHit.expiresAt > Date.now()) {
+    if (isFreshSnapshot(memoryHit)) {
       return res.status(200).json({ ok: true, ...memoryHit.payload, source: 'cache' });
     }
 
     const dbHit = await readDbSnapshot(cacheKey);
-    if (dbHit) {
-      memoryCache.set(cacheKey, { payload: dbHit, expiresAt: Date.now() + TTL_MS });
-      return res.status(200).json({ ok: true, ...dbHit, source: 'cache' });
+    if (isFreshSnapshot(dbHit)) {
+      memoryCache.set(cacheKey, dbHit);
+      return res.status(200).json({ ok: true, ...dbHit.payload, source: 'cache' });
     }
 
-    const payload = await buildPayload(lat, lon, category);
-    memoryCache.set(cacheKey, { payload, expiresAt: Date.now() + TTL_MS });
-    await writeDbSnapshot(cacheKey, grid, category, payload);
-    return res.status(200).json({ ok: true, ...payload });
+    try {
+      const payload = await buildPayload(lat, lon, category, radiusMeters);
+      const snapshot = { payload, expiresAt: Date.now() + TTL_MS };
+      memoryCache.set(cacheKey, snapshot);
+      await writeDbSnapshot(cacheKey, grid, category, payload);
+      return res.status(200).json({ ok: true, ...payload, source: 'fresh' });
+    } catch (e) {
+      console.error('[nearby] Fresh fetch failed', {
+        message: e.message,
+        stack: e.stack,
+        cacheKey,
+        grid,
+        category,
+        radiusMeters
+      });
+
+      const staleHit = memoryHit || dbHit;
+      if (staleHit?.payload?.restaurants) {
+        return res.status(200).json({
+          ok: true,
+          ...staleHit.payload,
+          source: 'stale-cache',
+          warning: 'Fresh data failed, showing cached results'
+        });
+      }
+
+      return res.status(502).json({
+        ok: false,
+        error: 'Kunde inte hämta restauranger just nu'
+      });
+    }
   } catch (e) {
     console.error('[nearby] Handler error', {
       message: e.message,
@@ -490,9 +546,9 @@ export default async function handler(req, res) {
       hasSupabaseAnonKey: Boolean(process.env.SUPABASE_ANON_KEY)
     });
 
-    return res.status(200).json({
+    return res.status(502).json({
       ok: false,
-      error: e.message || 'Kunde inte hämta restauranger just nu.'
+      error: 'Kunde inte hämta restauranger just nu'
     });
   }
 }
