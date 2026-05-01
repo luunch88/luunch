@@ -82,27 +82,6 @@
 
 <div class="toast" id="toast"></div>
 
-<!-- CLAIM MODAL -->
-<div class="modal-overlay" id="claimModal" onclick="if(event.target===this)closeClaim()">
-  <div class="modal">
-    <div class="modal-handle"></div>
-    <div class="modal-title">Claima din restaurang</div>
-    <div class="modal-sub">Logga in för att lägga till meny, öppettider och deals.</div>
-    <div class="modal-restaurant">
-      <div class="modal-restaurant-name" id="claimName"></div>
-      <div class="modal-restaurant-address" id="claimAddress"></div>
-    </div>
-    <div class="modal-label">Din e-postadress</div>
-    <input class="modal-input" id="claimEmail" type="email" placeholder="din@restaurang.se">
-    <input type="hidden" id="claimOsmId">
-    <input type="hidden" id="claimLat">
-    <input type="hidden" id="claimLon">
-    <button class="btn-submit" id="claimSubmitBtn" onclick="submitClaim()">Claima restaurang</button>
-    <div class="modal-result" id="claimResult"></div>
-    <button class="btn-cancel" onclick="closeClaim()">Avbryt</button>
-  </div>
-</div>
-
 <script src="/assets/api.js"></script>
 <script src="/assets/ui.js"></script>
 <script src="/assets/geo.js"></script>
