@@ -12,12 +12,17 @@ end $$;
 
 create table if not exists public.claims (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete cascade,
   email text not null,
   restaurant_id text,
   restaurant_name text not null,
-  address text,
+  address text not null,
+  postal_code text,
+  city text,
+  type text,
+  contact_person text,
   phone text,
+  organization_number text,
   website text,
   message text,
   status public.claim_status not null default 'pending',
@@ -26,8 +31,22 @@ create table if not exists public.claims (
   reviewed_by uuid references auth.users(id)
 );
 
+alter table public.claims
+  alter column user_id drop not null,
+  add column if not exists postal_code text,
+  add column if not exists city text,
+  add column if not exists type text,
+  add column if not exists contact_person text,
+  add column if not exists organization_number text;
+
 create index if not exists claims_user_status_idx
   on public.claims (user_id, status);
+
+create index if not exists claims_email_idx
+  on public.claims (email);
+
+create index if not exists claims_status_idx
+  on public.claims (status);
 
 create index if not exists claims_status_created_at_idx
   on public.claims (status, created_at);
