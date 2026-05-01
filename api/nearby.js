@@ -5,7 +5,7 @@ const TTL_MS = 6 * 60 * 60 * 1000;
 const GRID_SIZE = 0.005;
 const DEFAULT_RADIUS_METERS = 800;
 const MAX_RESULTS = 30;
-const CACHE_VERSION = 3;
+const CACHE_VERSION = 4;
 const OVERPASS_TIMEOUT_MS = 8000;
 const OVERPASS_ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
@@ -393,6 +393,141 @@ async function getClaimedData(osmIds) {
   return claimed;
 }
 
+function normalizeDedupeKey(restaurant) {
+  return [
+    restaurant.name,
+    restaurant.address,
+    restaurant.city
+  ]
+    .filter(Boolean)
+    .join('|')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+async function getVerifiedManualRestaurants(lat, lon, category, radiusMeters) {
+  if (!supabase) return [];
+  const { today, dayIndex, currentTime } = swedenNowParts();
+
+  try {
+    const { data: restaurants, error } = await supabase
+      .from('restaurants')
+      .select('id, osm_id, source, source_id, name, phone, address, postal_code, city, category, type, lat, lon, verified, claimed, claimed_by_user_id')
+      .eq('verified', true)
+      .not('lat', 'is', null)
+      .not('lon', 'is', null);
+
+    if (error) {
+      console.error('[nearby] Manual restaurants read failed', { message: error.message });
+      return [];
+    }
+
+    if (!restaurants?.length) return [];
+
+    const nearbyRestaurants = restaurants
+      .map(restaurant => {
+        const distance = Math.round(haversine(lat, lon, Number(restaurant.lat), Number(restaurant.lon)));
+        return { ...restaurant, distance_m: distance };
+      })
+      .filter(restaurant => restaurant.distance_m <= radiusMeters);
+
+    if (!nearbyRestaurants.length) return [];
+
+    const restaurantIds = nearbyRestaurants.map(r => r.id);
+    const [hours, { data: menus }] = await Promise.all([
+      fetchOpeningHours(restaurantIds, dayIndex),
+      supabase
+        .from('menus')
+        .select('restaurant_id, description, price')
+        .in('restaurant_id', restaurantIds)
+        .eq('date', today)
+    ]);
+
+    const hoursByRestaurant = new Map((hours || []).map(h => [h.restaurant_id, h]));
+    const menusByRestaurant = new Map();
+    for (const dish of menus || []) {
+      const dishes = menusByRestaurant.get(dish.restaurant_id) || [];
+      dishes.push({ description: dish.description, price: dish.price });
+      menusByRestaurant.set(dish.restaurant_id, dishes);
+    }
+
+    return nearbyRestaurants
+      .map(restaurant => {
+        const todayHours = hoursByRestaurant.get(restaurant.id);
+        const hoursStatus = getLuunchHoursStatus(todayHours, currentTime);
+        const tags = {
+          name: restaurant.name,
+          cuisine: restaurant.category || restaurant.type,
+          amenity: 'restaurant'
+        };
+
+        return {
+          id: restaurant.osm_id || restaurant.source_id || restaurant.id,
+          restaurant_id: restaurant.id,
+          osm_id: restaurant.osm_id || restaurant.source_id || restaurant.id,
+          source: restaurant.source || 'manual',
+          name: restaurant.name,
+          lat: Number(restaurant.lat),
+          lon: Number(restaurant.lon),
+          address: restaurant.address || '',
+          postal_code: restaurant.postal_code || null,
+          city: restaurant.city || null,
+          category: restaurant.category || restaurant.type || 'Restaurang',
+          type_label: restaurant.type || restaurant.category || 'Restaurang',
+          emoji: getEmoji(tags),
+          distance_m: restaurant.distance_m,
+          opening_hours_raw: null,
+          external_today_hours: null,
+          external_is_open_now: null,
+          external_open_status: 'unknown',
+          has_luunch_hours: Boolean(todayHours),
+          opening_hours_source: todayHours ? 'luunch' : null,
+          today_hours: todayHours ? hoursStatus.today_hours : null,
+          is_open_now: todayHours ? hoursStatus.is_open_now : null,
+          open_status: todayHours ? hoursStatus.open_status : 'unknown',
+          claimed: Boolean(restaurant.claimed || restaurant.claimed_by_user_id),
+          verified: Boolean(restaurant.verified),
+          phone: restaurant.phone || null,
+          today_opens: todayHours?.lunch_opens || todayHours?.opens || null,
+          today_closes: todayHours?.lunch_closes || todayHours?.closes || null,
+          dishes: menusByRestaurant.get(restaurant.id) || [],
+          tags
+        };
+      })
+      .filter(restaurant => matchesCategory(restaurant, category));
+  } catch (e) {
+    console.error('[nearby] Manual restaurants crashed', { message: e.message, stack: e.stack });
+    return [];
+  }
+}
+
+function mergeVerifiedRestaurants(externalRestaurants, manualRestaurants) {
+  const merged = [...externalRestaurants];
+
+  for (const manualRestaurant of manualRestaurants) {
+    const manualKey = normalizeDedupeKey(manualRestaurant);
+    const existingIndex = merged.findIndex(restaurant => {
+      return restaurant.osm_id === manualRestaurant.osm_id ||
+        restaurant.restaurant_id === manualRestaurant.restaurant_id ||
+        (manualKey && normalizeDedupeKey(restaurant) === manualKey);
+    });
+
+    if (existingIndex >= 0) {
+      merged[existingIndex] = {
+        ...merged[existingIndex],
+        ...manualRestaurant
+      };
+    } else {
+      merged.push(manualRestaurant);
+    }
+  }
+
+  return merged;
+}
+
 async function buildPayload(lat, lon, category, radiusMeters) {
   const elements = await fetchOverpass(lat, lon);
   const { currentTime } = swedenNowParts();
@@ -434,10 +569,12 @@ async function buildPayload(lat, lon, category, radiusMeters) {
     });
 
   const claimedData = await getClaimedData(baseRestaurants.map(r => r.osm_id));
-  const restaurants = baseRestaurants
+  const externalRestaurants = baseRestaurants
     .map(restaurant => ({ ...restaurant, ...(claimedData.get(restaurant.osm_id) || {}) }))
     .filter(restaurant => restaurant.distance_m <= radiusMeters)
-    .filter(restaurant => matchesCategory(restaurant, category))
+    .filter(restaurant => matchesCategory(restaurant, category));
+  const manualRestaurants = await getVerifiedManualRestaurants(lat, lon, category, radiusMeters);
+  const restaurants = mergeVerifiedRestaurants(externalRestaurants, manualRestaurants)
     .sort((a, b) => a.distance_m - b.distance_m)
     .slice(0, MAX_RESULTS);
 
