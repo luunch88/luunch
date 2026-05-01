@@ -7,6 +7,7 @@
     });
     const res = await fetch(`/api/nearby?${params.toString()}`);
     const data = await res.json();
+    if (data?.source) console.log('Nearby source:', data.source, data.cached_at);
     if (!res.ok) throw new Error(data.error || 'Kunde inte hämta restauranger.');
     if (data.ok === false) throw new Error(data.error || 'Kunde inte hämta restauranger.');
     return data;
