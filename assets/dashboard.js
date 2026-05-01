@@ -7,7 +7,6 @@ const { escapeHtml, escapeAttr } = window.LuunchUI;
 
 const days = ['MÃ¥ndag','Tisdag','Onsdag','Torsdag','Fredag','LÃ¶rdag','SÃ¶ndag'];
 let currentRestaurant = null;
-let pendingClaim = null;
 let claimInProgress = false;
 let currentUser = null;
 let currentSession = null;
@@ -26,30 +25,9 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const POSTAL_CODE_RE = /^\d{3}\s?\d{2}$/;
 const ORGANIZATION_NUMBER_RE = /^\d{6}-?\d{4}$/;
 
-function getPendingClaimFromUrl() {
-  const params = new URLSearchParams(window.location.search);
-  const restaurantId = params.get('restaurant_id');
-  if (!restaurantId) return null;
-  return {
-    restaurant_id: restaurantId,
-    restaurant_name: params.get('restaurant_name') || 'restaurangen',
-    address: params.get('address') || null,
-    lat: params.get('lat') ? Number(params.get('lat')) : null,
-    lon: params.get('lon') ? Number(params.get('lon')) : null
-  };
-}
-
 function setupAuthView() {
-  pendingClaim = getPendingClaimFromUrl();
   const mode = new URLSearchParams(window.location.search).get('mode');
-  if (pendingClaim) {
-    document.getElementById('authTitle').innerHTML = `Skapa konto<br>fÃ¶r att <em>ansÃ¶ka</em>`;
-    document.getElementById('authSub').textContent = `Skapa konto fÃ¶r att ansÃ¶ka om ${pendingClaim.restaurant_name}.`;
-    const ctx = document.getElementById('claimContext');
-    ctx.style.display = 'block';
-    ctx.textContent = `Du ansÃ¶ker om: ${pendingClaim.restaurant_name}`;
-  }
-  if (mode === 'signup' || pendingClaim) showRegister();
+  if (mode === 'signup') showRegister();
 }
 
 // â”€â”€ Build hours grid â”€â”€
@@ -105,7 +83,7 @@ async function submitClaimRequest(session, claimPayload) {
   const data = await res.json();
   claimInProgress = false;
   if (!res.ok || data.ok === false) {
-    throw new Error(data.error || 'Kunde inte skicka ansÃ¶kan.');
+    throw new Error('Kunde inte skicka ansökan just nu. Försök igen.');
   }
   return data.claim || null;
 }
@@ -113,17 +91,6 @@ async function submitClaimRequest(session, claimPayload) {
 function showPage(pageId) {
   document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
   document.getElementById(pageId).classList.add('active');
-}
-
-function manualRestaurantId(name, userId) {
-  const slug = name
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 60) || 'restaurang';
-  return `manual/${userId}/${slug}`;
 }
 
 function valueOf(id) {
@@ -256,15 +223,6 @@ async function checkSession() {
 async function handleSession(session, msgId = 'loginMsg') {
   try {
     currentSession = session;
-    if (pendingClaim) {
-      await submitClaimRequest(session, pendingClaim);
-      showMsg(msgId, 'âœ“ Tack! Din ansÃ¶kan Ã¤r skickad. Vi granskar den manuellt och Ã¥terkommer.', 'success');
-      const cleanUrl = `${window.location.pathname}`;
-      window.history.replaceState({}, '', cleanUrl);
-      await showPendingClaim({ restaurant_name: pendingClaim.restaurant_name });
-      pendingClaim = null;
-      return;
-    }
     const isAdmin = await loadAdminClaims({ silent: true });
     if (isAdmin) return;
     await loadDashboard(session.user);
@@ -677,7 +635,6 @@ async function applyRestaurant() {
   const name = valueOf('applyName');
   const btn = document.getElementById('applyBtn');
   const claimPayload = {
-    restaurant_id: manualRestaurantId(name, currentUser.id),
     restaurant_name: name,
     address: valueOf('applyAddress'),
     postal_code: valueOf('applyPostalCode'),
@@ -707,10 +664,10 @@ async function applyRestaurant() {
 
   try {
     const claim = await submitClaimRequest(session, claimPayload);
-    showMsg('applyMsg', 'âœ“ Tack! Din ansÃ¶kan Ã¤r skickad. Vi granskar den manuellt. Vi kontaktar dig via e-post.', 'success');
+    showMsg('applyMsg', 'Tack! Din ansökan är skickad. Vi granskar den manuellt.', 'success');
     await showPendingClaim(claim || claimPayload);
   } catch (e) {
-    showMsg('applyMsg', e.message, 'error');
+    showMsg('applyMsg', 'Kunde inte skicka ansökan just nu. Försök igen.', 'error');
   }
 
   btn.disabled = false;
