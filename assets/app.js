@@ -384,49 +384,15 @@ function showDeals() {
 }
 
 function openClaim(osmId, name, address, lat, lon) {
-  document.getElementById('claimOsmId').value = osmId;
-  document.getElementById('claimName').textContent = name;
-  document.getElementById('claimAddress').textContent = address || '';
-  document.getElementById('claimLat').value = lat;
-  document.getElementById('claimLon').value = lon;
-  document.getElementById('claimModal').classList.add('show');
-}
-
-function closeClaim() {
-  document.getElementById('claimModal').classList.remove('show');
-  document.getElementById('claimEmail').value = '';
-  document.getElementById('claimResult').textContent = '';
-}
-
-async function submitClaim() {
-  const osmId = document.getElementById('claimOsmId').value;
-  const name = document.getElementById('claimName').textContent;
-  const email = document.getElementById('claimEmail').value.trim();
-  const lat = parseFloat(document.getElementById('claimLat').value);
-  const lon = parseFloat(document.getElementById('claimLon').value);
-  const address = document.getElementById('claimAddress').textContent;
-  const resultEl = document.getElementById('claimResult');
-
-  if (!email) {
-    resultEl.textContent = 'Ange din e-postadress.';
-    return;
-  }
-
-  const btn = document.getElementById('claimSubmitBtn');
-  btn.textContent = 'Skickar…';
-  btn.disabled = true;
-
-  try {
-    const data = await window.LuunchAPI.submitClaim({ osm_id: osmId, name, email, lat, lon, address });
-    resultEl.style.color = 'var(--green)';
-    resultEl.textContent = '✓ ' + data.message;
-  } catch (e) {
-    resultEl.style.color = 'var(--red)';
-    resultEl.textContent = '✗ ' + e.message;
-  }
-
-  btn.textContent = 'Claima restaurang';
-  btn.disabled = false;
+  const params = new URLSearchParams({
+    mode: 'signup',
+    restaurant_id: osmId,
+    restaurant_name: name
+  });
+  if (address) params.set('address', address);
+  if (Number.isFinite(lat)) params.set('lat', String(lat));
+  if (Number.isFinite(lon)) params.set('lon', String(lon));
+  window.location.href = `/dashboard.html?${params.toString()}`;
 }
 
 async function loadNearby() {
