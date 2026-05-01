@@ -7,6 +7,35 @@ const { escapeHtml, escapeAttr } = window.LuunchUI;
 
 const days = ['Måndag','Tisdag','Onsdag','Torsdag','Fredag','Lördag','Söndag'];
 let currentRestaurant = null;
+let pendingClaim = null;
+let claimInProgress = false;
+let recentClaimName = null;
+
+function getPendingClaimFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const restaurantId = params.get('restaurant_id');
+  if (!restaurantId) return null;
+  return {
+    restaurant_id: restaurantId,
+    restaurant_name: params.get('restaurant_name') || 'restaurangen',
+    address: params.get('address') || null,
+    lat: params.get('lat') ? Number(params.get('lat')) : null,
+    lon: params.get('lon') ? Number(params.get('lon')) : null
+  };
+}
+
+function setupAuthView() {
+  pendingClaim = getPendingClaimFromUrl();
+  const mode = new URLSearchParams(window.location.search).get('mode');
+  if (pendingClaim) {
+    document.getElementById('authTitle').innerHTML = `Skapa konto<br>för att <em>claima</em>`;
+    document.getElementById('authSub').textContent = `Skapa konto för att claima ${pendingClaim.restaurant_name}.`;
+    const ctx = document.getElementById('claimContext');
+    ctx.style.display = 'block';
+    ctx.textContent = `Du claimar: ${pendingClaim.restaurant_name}`;
+  }
+  if (mode === 'signup' || pendingClaim) showRegister();
+}
 
 // ── Build hours grid ──
 function buildHoursGrid(existing = []) {
@@ -47,6 +76,25 @@ function showLogin() {
   document.getElementById('formLogin').style.display = 'block';
 }
 
+async function claimPendingRestaurant(session) {
+  if (!pendingClaim || claimInProgress) return null;
+  claimInProgress = true;
+  const res = await fetch('/api/claim', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session.access_token}`
+    },
+    body: JSON.stringify(pendingClaim)
+  });
+  const data = await res.json();
+  claimInProgress = false;
+  if (!res.ok || data.ok === false) {
+    throw new Error(data.error || 'Kunde inte claima restaurangen.');
+  }
+  return data.restaurant || null;
+}
+
 // ── Login ──
 async function login() {
   const email = document.getElementById('loginEmail').value.trim();
@@ -57,10 +105,12 @@ async function login() {
   btn.disabled = true;
   btn.innerHTML = '<div class="spinner-sm"></div> Loggar in…';
 
-  const { error } = await sb.auth.signInWithPassword({ email, password });
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
 
   if (error) {
     showMsg('loginMsg', 'Fel e-post eller lösenord.', 'error');
+  } else if (data.session) {
+    await handleSession(data.session, 'loginMsg');
   }
   btn.disabled = false;
   btn.innerHTML = 'Logga in';
@@ -70,21 +120,24 @@ async function login() {
 async function register() {
   const email = document.getElementById('regEmail').value.trim();
   const password = document.getElementById('regPassword').value;
+  const confirm = document.getElementById('regConfirm').value;
   const btn = document.getElementById('regBtn');
   if (!email || !password) { showMsg('regMsg', 'Fyll i alla fält.', 'error'); return; }
   if (password.length < 6) { showMsg('regMsg', 'Lösenordet måste vara minst 6 tecken.', 'error'); return; }
+  if (password !== confirm) { showMsg('regMsg', 'Lösenorden matchar inte.', 'error'); return; }
 
   btn.disabled = true;
   btn.innerHTML = '<div class="spinner-sm"></div> Skapar konto…';
 
-  const { error } = await sb.auth.signUp({ email, password });
+  const { data, error } = await sb.auth.signUp({ email, password });
 
   if (error) {
     showMsg('regMsg', 'Något gick fel: ' + error.message, 'error');
+  } else if (data.session) {
+    showMsg('regMsg', '✓ Konto skapat! Claimar restaurangen…', 'success');
+    await handleSession(data.session, 'regMsg');
   } else {
-    showMsg('regMsg', '✓ Konto skapat! Loggar in…', 'success');
-    // Logga in direkt
-    await sb.auth.signInWithPassword({ email, password });
+    showMsg('regMsg', '✓ Konto skapat! Bekräfta din e-post och logga sedan in här.', 'success');
   }
   btn.disabled = false;
   btn.innerHTML = 'Skapa konto';
@@ -94,28 +147,48 @@ async function register() {
 async function checkSession() {
   const { data: { session } } = await sb.auth.getSession();
   if (session) {
-    await loadDashboard(session.user.email);
+    await handleSession(session, 'loginMsg');
+  }
+}
+
+async function handleSession(session, msgId = 'loginMsg') {
+  try {
+    if (pendingClaim) {
+      await claimPendingRestaurant(session);
+      recentClaimName = pendingClaim.restaurant_name;
+      showMsg(msgId, `✓ Klart! Du hanterar nu ${pendingClaim.restaurant_name}.`, 'success');
+      const cleanUrl = `${window.location.pathname}`;
+      window.history.replaceState({}, '', cleanUrl);
+      pendingClaim = null;
+    }
+    await loadDashboard(session.user);
+  } catch (e) {
+    showMsg(msgId, e.message, 'error');
   }
 }
 
 // ── Load dashboard ──
-async function loadDashboard(email) {
-  // Hämta restaurang kopplad till denna email
+async function loadDashboard(user) {
+  // Hämta restaurang kopplad till denna användare
   const { data: restaurant } = await sb
     .from('restaurants')
     .select('*')
-    .eq('email', email)
-    .single();
+    .eq('claimed_by_user_id', user.id)
+    .order('claimed_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
   if (!restaurant) {
-    showMsg('loginMsg', 'Ingen restaurang hittades för denna e-post. Claima din restaurang på luunch.se först.', 'error');
-    await sb.auth.signOut();
+    showMsg('loginMsg', 'Ingen restaurang är kopplad till ditt konto ännu. Claima din restaurang från luunch.se först.', 'error');
     return;
   }
 
   currentRestaurant = restaurant;
   document.getElementById('dashName').textContent = restaurant.name;
-  document.getElementById('dashSub').textContent = restaurant.address || 'Uppdatera din info nedan';
+  document.getElementById('dashSub').textContent = recentClaimName
+    ? `Klart! Du hanterar nu ${recentClaimName}.`
+    : restaurant.address || 'Uppdatera din info nedan';
+  recentClaimName = null;
 
   // Hämta dagens rätter
   const today = new Date().toISOString().split('T')[0];
@@ -250,7 +323,8 @@ function showMsg(id, text, type) {
 
 // ── Init ──
 sb.auth.onAuthStateChange((event, session) => {
-  if (session) loadDashboard(session.user.email);
+  if (session && event !== 'INITIAL_SESSION') handleSession(session, 'loginMsg');
 });
-checkSession();
 buildHoursGrid();
+setupAuthView();
+checkSession();
