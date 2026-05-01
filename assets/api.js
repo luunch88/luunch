@@ -13,14 +13,18 @@
     return data;
   }
 
-  async function submitClaim(payload) {
+  async function submitClaim(payload, accessToken) {
     const res = await fetch('/api/claim', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {})
+      },
       body: JSON.stringify(payload)
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Kunde inte claima restaurangen.');
+    if (data.ok === false) throw new Error(data.error || 'Kunde inte claima restaurangen.');
     return data;
   }
 
