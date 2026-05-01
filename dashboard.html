@@ -64,13 +64,45 @@
     </div>
     <label class="form-label">Restaurangnamn</label>
     <input class="form-input" id="applyName" type="text" placeholder="T.ex. Pizzeria Centro">
+    <div class="field-error" id="applyNameError"></div>
     <label class="form-label">Adress</label>
     <input class="form-input" id="applyAddress" type="text" placeholder="Gata och nummer">
-    <label class="form-label">Telefon</label>
+    <div class="field-error" id="applyAddressError"></div>
+    <label class="form-label">Postnummer</label>
+    <input class="form-input" id="applyPostalCode" type="text" inputmode="numeric" autocomplete="postal-code" placeholder="123 45">
+    <div class="field-error" id="applyPostalCodeError"></div>
+    <label class="form-label">Ort</label>
+    <input class="form-input" id="applyCity" type="text" autocomplete="address-level2" placeholder="T.ex. Lund">
+    <div class="field-error" id="applyCityError"></div>
+    <label class="form-label">Typ av restaurang</label>
+    <select class="form-input" id="applyType">
+      <option value="">Välj typ</option>
+      <option value="Pizza">Pizza</option>
+      <option value="Sushi">Sushi</option>
+      <option value="Burgare">Burgare</option>
+      <option value="Asiatiskt">Asiatiskt</option>
+      <option value="Thai">Thai</option>
+      <option value="Indiskt">Indiskt</option>
+      <option value="Vegetariskt">Vegetariskt</option>
+      <option value="Café">Café</option>
+      <option value="Annat">Annat</option>
+    </select>
+    <div class="field-error" id="applyTypeError"></div>
+    <label class="form-label">Kontaktperson</label>
+    <input class="form-input" id="applyContactPerson" type="text" autocomplete="name" placeholder="För- och efternamn">
+    <div class="field-error" id="applyContactPersonError"></div>
+    <label class="form-label">E-post</label>
+    <input class="form-input" id="applyEmail" type="email" autocomplete="email" placeholder="din@restaurang.se">
+    <div class="field-error" id="applyEmailError"></div>
+    <label class="form-label">Telefon (valfri)</label>
     <input class="form-input" id="applyPhone" type="tel" placeholder="Valfritt">
-    <label class="form-label">Hemsida</label>
+    <label class="form-label">Organisationsnummer (valfri)</label>
+    <input class="form-input" id="applyOrganizationNumber" type="text" inputmode="numeric" placeholder="556123-4567">
+    <p class="field-help">Hjälper oss verifiera att du äger restaurangen</p>
+    <div class="field-error" id="applyOrganizationNumberError"></div>
+    <label class="form-label">Hemsida (valfri)</label>
     <input class="form-input" id="applyWebsite" type="url" placeholder="Valfritt">
-    <label class="form-label">Kommentar</label>
+    <label class="form-label">Meddelande (valfri)</label>
     <textarea class="form-input form-textarea" id="applyMessage" placeholder="Berätta gärna kort varför du ansöker"></textarea>
     <button class="btn-primary" id="applyBtn" onclick="applyRestaurant()">Ansök om restaurang</button>
     <div id="applyMsg"></div>
@@ -93,7 +125,8 @@
       <div class="section-card-title">⏳ Status</div>
       <div class="section-status missing">Pending</div>
     </div>
-    <p class="form-hint">Tack! Din ansökan är skickad. Vi granskar den manuellt och återkommer.</p>
+    <p class="form-hint">Tack! Din ansökan är skickad. Vi granskar den manuellt. Vi kontaktar dig via e-post.</p>
+    <div class="readonly-list" id="pendingDetails"></div>
   </div>
 
   <div class="divider"></div>
