@@ -4,7 +4,7 @@ import { applyCors } from './_cors.js';
 const TTL_MS = 6 * 60 * 60 * 1000;
 const GRID_SIZE = 0.005;
 const MAX_RESULTS = 30;
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;
 const OVERPASS_TIMEOUT_MS = 8000;
 const OVERPASS_ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
@@ -340,10 +340,19 @@ async function getClaimedData(osmIds) {
         verified: restaurant.verified,
         phone: restaurant.phone,
         address: restaurant.address,
+        has_luunch_hours: false,
+        opening_hours_source: null,
+        is_open_now: null,
+        open_status: 'unknown',
+        today_hours: null,
+        today_opens: null,
+        today_closes: null,
         dishes: menusByRestaurant.get(restaurant.id) || []
       };
 
       if (todayHours) {
+        claimedRestaurant.has_luunch_hours = true;
+        claimedRestaurant.opening_hours_source = 'luunch';
         claimedRestaurant.is_open_now = hoursStatus.is_open_now;
         claimedRestaurant.open_status = hoursStatus.open_status;
         claimedRestaurant.today_hours = hoursStatus.today_hours;
@@ -383,9 +392,14 @@ async function buildPayload(lat, lon, category) {
         emoji: getEmoji(tags),
         distance_m: itemLat && itemLon ? Math.round(haversine(lat, lon, itemLat, itemLon)) : 999999,
         opening_hours_raw: tags.opening_hours || null,
-        today_hours: openingStatus.today_hours,
-        is_open_now: openingStatus.is_open_now,
-        open_status: openingStatus.open_status,
+        external_today_hours: openingStatus.today_hours,
+        external_is_open_now: openingStatus.is_open_now,
+        external_open_status: openingStatus.open_status,
+        has_luunch_hours: false,
+        opening_hours_source: null,
+        today_hours: null,
+        is_open_now: null,
+        open_status: 'unknown',
         claimed: false,
         verified: false,
         today_opens: null,
