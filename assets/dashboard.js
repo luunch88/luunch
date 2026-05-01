@@ -69,23 +69,25 @@ function showLogin() {
   document.getElementById('formLogin').style.display = 'block';
 }
 
-async function submitClaimRequest(session, claimPayload) {
+async function submitClaimRequest(claimPayload) {
   if (claimInProgress) return null;
   claimInProgress = true;
-  const res = await fetch('/api/claim', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${session.access_token}`
-    },
-    body: JSON.stringify(claimPayload)
-  });
-  const data = await res.json();
-  claimInProgress = false;
-  if (!res.ok || data.ok === false) {
-    throw new Error('Kunde inte skicka ansökan just nu. Försök igen.');
+  try {
+    const res = await fetch('/api/claim', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(claimPayload)
+    });
+    const data = await res.json();
+    if (!res.ok || data.ok === false) {
+      throw new Error('Kunde inte skicka ansökan just nu. Försök igen.');
+    }
+    return data.claim || null;
+  } finally {
+    claimInProgress = false;
   }
-  return data.claim || null;
 }
 
 function showPage(pageId) {
@@ -144,7 +146,7 @@ function validateApplyPayload(payload) {
     setFieldError('applyCity', 'Ange ort.');
     isValid = false;
   }
-  if (!RESTAURANT_TYPES.has(payload.type)) {
+  if (!RESTAURANT_TYPES.has(payload.restaurant_type)) {
     setFieldError('applyType', 'VÃ¤lj typ av restaurang.');
     isValid = false;
   }
@@ -234,7 +236,7 @@ async function handleSession(session, msgId = 'loginMsg') {
 async function getPendingClaim(userId) {
   const { data, error } = await sb
     .from('claims')
-    .select('id, restaurant_name, address, postal_code, city, type, contact_person, email, phone, organization_number, website, message, status, created_at')
+    .select('id, restaurant_name, address, postal_code, city, restaurant_type, contact_person, email, phone, organization_number, website, message, status, created_at')
     .eq('user_id', userId)
     .eq('status', 'pending')
     .order('created_at', { ascending: false })
@@ -262,7 +264,7 @@ function renderPendingDetails(claim) {
   const rows = [
     ['Restaurangnamn', claim.restaurant_name],
     ['Adress', [claim.address, claim.postal_code, claim.city].filter(Boolean).join(', ')],
-    ['Typ', claim.type],
+    ['Typ', claim.restaurant_type],
     ['Kontaktperson', claim.contact_person],
     ['E-post', claim.email],
     ['Telefon', claim.phone],
@@ -363,7 +365,7 @@ function renderAdminClaims(claims) {
     const info = document.createElement('div');
     info.className = 'admin-claim-grid';
     appendAdminField(info, 'Adress', [claim.address, claim.postal_code, claim.city].filter(Boolean).join(', '));
-    appendAdminField(info, 'Typ', claim.type);
+    appendAdminField(info, 'Typ', claim.restaurant_type);
     appendAdminField(info, 'Kontaktperson', claim.contact_person);
     appendAdminField(info, 'Telefon', claim.phone);
     appendAdminField(info, 'Organisationsnummer', claim.organization_number);
@@ -477,11 +479,6 @@ async function loadDashboard(user) {
     .maybeSingle();
 
   if (!restaurant) {
-    const pending = await getPendingClaim(user.id);
-    if (pending) {
-      await showPendingClaim(pending);
-      return;
-    }
     prepareApplyForm();
     showPage('pageApply');
     return;
@@ -639,7 +636,7 @@ async function applyRestaurant() {
     address: valueOf('applyAddress'),
     postal_code: valueOf('applyPostalCode'),
     city: valueOf('applyCity'),
-    type: valueOf('applyType'),
+    restaurant_type: valueOf('applyType'),
     contact_person: valueOf('applyContactPerson'),
     email: valueOf('applyEmail'),
     phone: valueOf('applyPhone') || null,
@@ -653,19 +650,13 @@ async function applyRestaurant() {
     return;
   }
 
-  const { data: { session } } = await sb.auth.getSession();
-  if (!session) {
-    showMsg('applyMsg', 'Du mÃ¥ste vara inloggad fÃ¶r att ansÃ¶ka.', 'error');
-    return;
-  }
-
   btn.disabled = true;
   btn.innerHTML = '<div class="spinner-sm"></div> Skickar...';
 
   try {
-    const claim = await submitClaimRequest(session, claimPayload);
+    await submitClaimRequest(claimPayload);
     showMsg('applyMsg', 'Tack! Din ansökan är skickad. Vi granskar den manuellt.', 'success');
-    await showPendingClaim(claim || claimPayload);
+    await showPendingClaim(claimPayload);
   } catch (e) {
     showMsg('applyMsg', 'Kunde inte skicka ansökan just nu. Försök igen.', 'error');
   }
