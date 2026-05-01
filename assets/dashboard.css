@@ -55,6 +55,8 @@ header {
 .btn-primary:disabled { opacity: 0.6; cursor: default; }
 .btn-secondary { width: 100%; background: transparent; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 13px; font-size: 0.88rem; font-weight: 500; color: var(--ink2); cursor: pointer; font-family: 'Plus Jakarta Sans', sans-serif; margin-top: 10px; transition: border-color 0.15s; }
 .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+.btn-inline { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; color: var(--ink2); cursor: pointer; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 0.76rem; font-weight: 600; padding: 8px 10px; }
+.btn-inline:hover { border-color: var(--accent); color: var(--accent); }
 
 .spinner-sm { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.7s linear infinite; }
 
@@ -77,6 +79,20 @@ header {
 .readonly-row { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; }
 .readonly-label { color: var(--ink2); font-size: 0.66rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 4px; }
 .readonly-value { color: var(--ink); font-size: 0.86rem; line-height: 1.45; overflow-wrap: anywhere; }
+.admin-claims-list { display: grid; gap: 14px; }
+.admin-claim { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px; }
+.admin-claim-title { font-size: 1rem; font-weight: 700; margin-bottom: 4px; }
+.admin-claim-meta { color: var(--ink2); font-size: 0.76rem; line-height: 1.5; margin-bottom: 12px; }
+.admin-claim-grid { display: grid; gap: 8px; margin-bottom: 12px; }
+.admin-actions { display: grid; gap: 8px; }
+.admin-action-row { display: grid; gap: 8px; grid-template-columns: 1fr; }
+.admin-action-row .form-input { margin-bottom: 0; }
+.admin-action-row .btn-secondary, .admin-action-row .btn-primary { margin-top: 0; }
+
+@media (min-width: 720px) {
+  .admin-action-row { grid-template-columns: 1fr auto; align-items: center; }
+  .admin-action-row.manual { grid-template-columns: 1fr 1fr auto; }
+}
 
 /* Menu form */
 .menu-preview { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 14px; }
