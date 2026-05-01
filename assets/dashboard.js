@@ -9,7 +9,6 @@ const days = ['Måndag','Tisdag','Onsdag','Torsdag','Fredag','Lördag','Söndag'
 let currentRestaurant = null;
 let pendingClaim = null;
 let claimInProgress = false;
-let recentClaimName = null;
 let currentUser = null;
 
 function getPendingClaimFromUrl() {
@@ -29,11 +28,11 @@ function setupAuthView() {
   pendingClaim = getPendingClaimFromUrl();
   const mode = new URLSearchParams(window.location.search).get('mode');
   if (pendingClaim) {
-    document.getElementById('authTitle').innerHTML = `Skapa konto<br>för att <em>claima</em>`;
-    document.getElementById('authSub').textContent = `Skapa konto för att claima ${pendingClaim.restaurant_name}.`;
+    document.getElementById('authTitle').innerHTML = `Skapa konto<br>för att <em>ansöka</em>`;
+    document.getElementById('authSub').textContent = `Skapa konto för att ansöka om ${pendingClaim.restaurant_name}.`;
     const ctx = document.getElementById('claimContext');
     ctx.style.display = 'block';
-    ctx.textContent = `Du claimar: ${pendingClaim.restaurant_name}`;
+    ctx.textContent = `Du ansöker om: ${pendingClaim.restaurant_name}`;
   }
   if (mode === 'signup' || pendingClaim) showRegister();
 }
@@ -77,8 +76,8 @@ function showLogin() {
   document.getElementById('formLogin').style.display = 'block';
 }
 
-async function claimPendingRestaurant(session) {
-  if (!pendingClaim || claimInProgress) return null;
+async function submitClaimRequest(session, claimPayload) {
+  if (claimInProgress) return null;
   claimInProgress = true;
   const res = await fetch('/api/claim', {
     method: 'POST',
@@ -86,14 +85,14 @@ async function claimPendingRestaurant(session) {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${session.access_token}`
     },
-    body: JSON.stringify(pendingClaim)
+    body: JSON.stringify(claimPayload)
   });
   const data = await res.json();
   claimInProgress = false;
   if (!res.ok || data.ok === false) {
-    throw new Error(data.error || 'Kunde inte claima restaurangen.');
+    throw new Error(data.error || 'Kunde inte skicka ansökan.');
   }
-  return data.restaurant || null;
+  return data.claim || null;
 }
 
 function showPage(pageId) {
@@ -116,6 +115,9 @@ async function applyRestaurant() {
   if (!currentUser) return;
   const name = document.getElementById('applyName').value.trim();
   const address = document.getElementById('applyAddress').value.trim();
+  const phone = document.getElementById('applyPhone').value.trim();
+  const website = document.getElementById('applyWebsite').value.trim();
+  const message = document.getElementById('applyMessage').value.trim();
   const btn = document.getElementById('applyBtn');
   if (!name) {
     showMsg('applyMsg', 'Ange restaurangnamn.', 'error');
@@ -132,16 +134,17 @@ async function applyRestaurant() {
   btn.innerHTML = '<div class="spinner-sm"></div> Skickar…';
 
   try {
-    pendingClaim = {
+    const claimPayload = {
       restaurant_id: manualRestaurantId(name, currentUser.id),
       restaurant_name: name,
-      address: address || null
+      address: address || null,
+      phone: phone || null,
+      website: website || null,
+      message: message || null
     };
-    recentClaimName = name;
-    await claimPendingRestaurant(session);
-    pendingClaim = null;
-    showMsg('applyMsg', `✓ Klart! Du hanterar nu ${name}.`, 'success');
-    await loadDashboard(currentUser);
+    await submitClaimRequest(session, claimPayload);
+    showMsg('applyMsg', '✓ Tack! Din ansökan är skickad. Vi granskar den manuellt och återkommer.', 'success');
+    await showPendingClaim({ restaurant_name: name });
   } catch (e) {
     showMsg('applyMsg', e.message, 'error');
   }
@@ -189,7 +192,7 @@ async function register() {
   if (error) {
     showMsg('regMsg', 'Något gick fel: ' + error.message, 'error');
   } else if (data.session) {
-    showMsg('regMsg', '✓ Konto skapat! Claimar restaurangen…', 'success');
+    showMsg('regMsg', '✓ Konto skapat! Skickar ansökan…', 'success');
     await handleSession(data.session, 'regMsg');
   } else {
     showMsg('regMsg', '✓ Konto skapat! Bekräfta din e-post och logga sedan in här.', 'success');
@@ -209,17 +212,39 @@ async function checkSession() {
 async function handleSession(session, msgId = 'loginMsg') {
   try {
     if (pendingClaim) {
-      await claimPendingRestaurant(session);
-      recentClaimName = pendingClaim.restaurant_name;
-      showMsg(msgId, `✓ Klart! Du hanterar nu ${pendingClaim.restaurant_name}.`, 'success');
+      await submitClaimRequest(session, pendingClaim);
+      showMsg(msgId, '✓ Tack! Din ansökan är skickad. Vi granskar den manuellt och återkommer.', 'success');
       const cleanUrl = `${window.location.pathname}`;
       window.history.replaceState({}, '', cleanUrl);
+      await showPendingClaim({ restaurant_name: pendingClaim.restaurant_name });
       pendingClaim = null;
+      return;
     }
     await loadDashboard(session.user);
   } catch (e) {
     showMsg(msgId, e.message, 'error');
   }
+}
+
+async function getPendingClaim(userId) {
+  const { data, error } = await sb
+    .from('claims')
+    .select('id, restaurant_name, status, created_at')
+    .eq('user_id', userId)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) return null;
+  return data || null;
+}
+
+async function showPendingClaim(claim) {
+  document.getElementById('pendingSub').textContent = claim?.restaurant_name
+    ? `Din ansökan för ${claim.restaurant_name} väntar på granskning.`
+    : 'Din ansökan väntar på granskning.';
+  showPage('pagePending');
 }
 
 // ── Load dashboard ──
@@ -235,16 +260,18 @@ async function loadDashboard(user) {
     .maybeSingle();
 
   if (!restaurant) {
+    const pending = await getPendingClaim(user.id);
+    if (pending) {
+      await showPendingClaim(pending);
+      return;
+    }
     showPage('pageApply');
     return;
   }
 
   currentRestaurant = restaurant;
   document.getElementById('dashName').textContent = restaurant.name;
-  document.getElementById('dashSub').textContent = recentClaimName
-    ? `Klart! Du hanterar nu ${recentClaimName}.`
-    : restaurant.address || 'Uppdatera din info nedan';
-  recentClaimName = null;
+  document.getElementById('dashSub').textContent = restaurant.address || 'Uppdatera din info nedan';
 
   // Hämta dagens rätter
   const today = new Date().toISOString().split('T')[0];
