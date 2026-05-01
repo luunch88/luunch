@@ -1,41 +1,54 @@
 import { createClient } from '@supabase/supabase-js';
 import { applyCors } from './_cors.js';
 
-let supabase = null;
-try {
-  if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
-    supabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_KEY
-    );
-  }
-} catch (e) {
-  console.error('[claim] Supabase init error', { message: e.message });
-}
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
+const supabase = supabaseUrl && supabaseServiceKey
+  ? createClient(supabaseUrl, supabaseServiceKey)
+  : null;
 
-function getBearerToken(req) {
-  const header = req.headers.authorization || req.headers.Authorization || '';
-  const match = header.match(/^Bearer\s+(.+)$/i);
-  return match?.[1] || null;
-}
-
-const ALLOWED_TYPES = new Set([
-  'Pizza',
-  'Sushi',
-  'Burgare',
-  'Asiatiskt',
-  'Thai',
-  'Indiskt',
-  'Vegetariskt',
-  'CafÃ©',
-  'Annat'
-]);
+const ALLOWED_STATUSES = new Set(['pending', 'approved', 'rejected']);
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const POSTAL_CODE_RE = /^\d{3}\s?\d{2}$/;
 const ORGANIZATION_NUMBER_RE = /^\d{6}-?\d{4}$/;
 
 function cleanText(value) {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function optionalText(value) {
+  const cleaned = cleanText(value);
+  return cleaned || null;
+}
+
+function validatePayload(payload) {
+  const required = [
+    ['restaurant_name', 'Restaurangnamn krävs'],
+    ['address', 'Adress krävs'],
+    ['postal_code', 'Postnummer krävs'],
+    ['city', 'Ort krävs'],
+    ['restaurant_type', 'Typ av restaurang krävs'],
+    ['contact_person', 'Kontaktperson krävs'],
+    ['email', 'E-post krävs']
+  ];
+
+  for (const [field, message] of required) {
+    if (!payload[field]) return message;
+  }
+
+  if (!POSTAL_CODE_RE.test(payload.postal_code)) {
+    return 'Postnummer ska vara 12345 eller 123 45';
+  }
+
+  if (!EMAIL_RE.test(payload.email)) {
+    return 'E-postadressen är ogiltig';
+  }
+
+  if (payload.organization_number && !ORGANIZATION_NUMBER_RE.test(payload.organization_number)) {
+    return 'Organisationsnummer ska vara 556123-4567 eller 5561234567';
+  }
+
+  return null;
 }
 
 export default async function handler(req, res) {
@@ -45,152 +58,76 @@ export default async function handler(req, res) {
     return res.status(403).json({ ok: false, error: 'Origin not allowed' });
   }
   if (req.method === 'OPTIONS') return res.status(200).json({ ok: true });
-  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' });
+  if (req.method !== 'POST') {
+    return res.status(405).json({ ok: false, error: 'Endast POST stöds' });
+  }
 
   try {
     if (!supabase) {
-      console.error('[claim] Missing Supabase service env', {
-        hasSupabaseUrl: Boolean(process.env.SUPABASE_URL),
-        hasSupabaseServiceKey: Boolean(process.env.SUPABASE_SERVICE_KEY)
+      console.error('[claim] Missing Supabase env', {
+        hasSupabaseUrl: Boolean(supabaseUrl),
+        hasServiceRoleKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+        hasLegacyServiceKey: Boolean(process.env.SUPABASE_SERVICE_KEY)
       });
-      return res.status(500).json({ ok: false, error: 'Claim API Ã¤r inte konfigurerat' });
-    }
-
-    const token = getBearerToken(req);
-    if (!token) {
-      return res.status(401).json({
+      return res.status(500).json({
         ok: false,
-        error: 'Du mÃ¥ste vara inloggad fÃ¶r att ansÃ¶ka om restaurang'
+        error: 'Supabase är inte konfigurerat för ansökningar'
       });
     }
 
-    const { data: authData, error: authError } = await supabase.auth.getUser(token);
-    const user = authData?.user;
-    if (authError || !user) {
-      return res.status(401).json({
-        ok: false,
-        error: 'Du mÃ¥ste vara inloggad fÃ¶r att ansÃ¶ka om restaurang'
-      });
-    }
-
-    const {
-      restaurant_id = null,
-      restaurant_name,
-      address = null,
-      postal_code = null,
-      city = null,
-      type = null,
-      contact_person = null,
-      email = null,
-      phone = null,
-      organization_number = null,
-      website = null,
-      message = null
-    } = req.body || {};
-
+    const body = req.body || {};
     const payload = {
-      restaurant_id: cleanText(restaurant_id) || null,
-      restaurant_name: cleanText(restaurant_name),
-      address: cleanText(address),
-      postal_code: cleanText(postal_code),
-      city: cleanText(city),
-      type: cleanText(type),
-      contact_person: cleanText(contact_person),
-      email: cleanText(email) || user.email,
-      phone: cleanText(phone) || null,
-      organization_number: cleanText(organization_number) || null,
-      website: cleanText(website) || null,
-      message: cleanText(message) || null
+      restaurant_name: cleanText(body.restaurant_name),
+      address: cleanText(body.address),
+      postal_code: cleanText(body.postal_code),
+      city: cleanText(body.city),
+      restaurant_type: cleanText(body.restaurant_type || body.type),
+      contact_person: cleanText(body.contact_person),
+      email: cleanText(body.email).toLowerCase(),
+      phone: optionalText(body.phone),
+      website: optionalText(body.website),
+      organization_number: optionalText(body.organization_number),
+      message: optionalText(body.message),
+      status: 'pending'
     };
 
-    if (!payload.restaurant_name) {
-      return res.status(400).json({ ok: false, error: 'restaurant_name krävs' });
-    }
-    if (!payload.address) {
-      return res.status(400).json({ ok: false, error: 'address krävs' });
-    }
-    if (!POSTAL_CODE_RE.test(payload.postal_code)) {
-      return res.status(400).json({ ok: false, error: 'postal_code har ogiltigt format' });
-    }
-    if (!payload.city) {
-      return res.status(400).json({ ok: false, error: 'city krävs' });
-    }
-    if (!ALLOWED_TYPES.has(payload.type)) {
-      return res.status(400).json({ ok: false, error: 'type krävs' });
-    }
-    if (!payload.contact_person) {
-      return res.status(400).json({ ok: false, error: 'contact_person krävs' });
-    }
-    if (!EMAIL_RE.test(payload.email)) {
-      return res.status(400).json({ ok: false, error: 'email har ogiltigt format' });
-    }
-    if (payload.organization_number && !ORGANIZATION_NUMBER_RE.test(payload.organization_number)) {
-      return res.status(400).json({ ok: false, error: 'organization_number har ogiltigt format' });
+    const validationError = validatePayload(payload);
+    if (validationError) {
+      return res.status(400).json({ ok: false, error: validationError });
     }
 
-    const { data: pendingClaim, error: pendingError } = await supabase
+    if (!ALLOWED_STATUSES.has(payload.status)) {
+      return res.status(400).json({ ok: false, error: 'Ogiltig status' });
+    }
+
+    const { error } = await supabase
       .from('claims')
-      .select('id, status, restaurant_name')
-      .eq('user_id', user.id)
-      .eq('status', 'pending')
-      .maybeSingle();
+      .insert(payload);
 
-    if (pendingError) {
-      console.error('[claim] Failed to read pending claim', {
-        message: pendingError.message,
-        user_id: user.id
+    if (error) {
+      console.error('[claim] Supabase insert failed', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint
       });
-      return res.status(500).json({ ok: false, error: 'Kunde inte kontrollera ansÃ¶kan' });
-    }
-
-    if (pendingClaim) {
-      return res.status(409).json({
+      return res.status(500).json({
         ok: false,
-        error: 'Du har redan en ansÃ¶kan som vÃ¤ntar pÃ¥ granskning.'
+        error: 'Kunde inte spara ansökan'
       });
-    }
-
-    const { data: claim, error: insertError } = await supabase
-      .from('claims')
-      .insert({
-        user_id: user.id,
-        email: payload.email,
-        restaurant_id: payload.restaurant_id,
-        restaurant_name: payload.restaurant_name,
-        address: payload.address,
-        postal_code: payload.postal_code,
-        city: payload.city,
-        type: payload.type,
-        contact_person: payload.contact_person,
-        phone: payload.phone,
-        organization_number: payload.organization_number,
-        website: payload.website,
-        message: payload.message,
-        status: 'pending'
-      })
-      .select()
-      .single();
-
-    if (insertError) {
-      console.error('[claim] Failed to create claim request', {
-        message: insertError.message,
-        user_id: user.id,
-        restaurant_name: payload.restaurant_name
-      });
-      return res.status(500).json({ ok: false, error: 'Kunde inte skicka ansÃ¶kan' });
     }
 
     return res.status(201).json({
       ok: true,
-      message: 'Tack! Din ansökan är skickad. Vi granskar den manuellt. Vi kontaktar dig via e-post.',
-      claim
+      message: 'Ansökan mottagen'
     });
   } catch (e) {
     console.error('[claim] Handler error', {
       message: e.message,
       stack: e.stack
     });
-    return res.status(500).json({ ok: false, error: 'Kunde inte skicka ansÃ¶kan' });
+    return res.status(500).json({
+      ok: false,
+      error: 'Kunde inte spara ansökan'
+    });
   }
 }
-
