@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0F0E0C">
+<title>luunch — Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Plus+Jakarta+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/admin.css">
+</head>
+<body>
+  <header class="admin-header">
+    <a href="/" class="logo">luu<span>n</span>ch</a>
+    <div class="header-tag">Admin</div>
+  </header>
+
+  <main class="admin-shell">
+    <section class="admin-hero">
+      <h1>Restaurangansökningar</h1>
+      <p>Granska claims och ändra status.</p>
+    </section>
+
+    <section class="panel">
+      <label class="form-label" for="adminSecret">Adminnyckel</label>
+      <div class="secret-row">
+        <input class="form-input" id="adminSecret" type="password" placeholder="Skriv ADMIN_SECRET">
+        <button class="btn-primary" id="loadBtn" type="button">Hämta ansökningar</button>
+      </div>
+
+      <label class="form-label" for="statusFilter">Status</label>
+      <select class="form-input" id="statusFilter">
+        <option value="pending">Pending</option>
+        <option value="approved">Approved</option>
+        <option value="rejected">Rejected</option>
+        <option value="all">Alla</option>
+      </select>
+
+      <div id="adminMsg" class="msg"></div>
+    </section>
+
+    <section class="claims-list" id="claimsList"></section>
+  </main>
+
+  <script src="/assets/admin.js"></script>
+</body>
+</html>
