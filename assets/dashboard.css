@@ -44,6 +44,7 @@ header {
 
 .form-label { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink2); margin-bottom: 8px; display: block; }
 .form-input { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 13px 15px; font-size: 0.9rem; color: var(--ink); font-family: 'Plus Jakarta Sans', sans-serif; outline: none; transition: border-color 0.15s; margin-bottom: 16px; }
+.form-textarea { min-height: 92px; resize: vertical; line-height: 1.45; }
 .form-input:focus { border-color: var(--accent); }
 .form-hint { font-size: 0.75rem; color: var(--ink2); margin-bottom: 20px; line-height: 1.5; }
 
