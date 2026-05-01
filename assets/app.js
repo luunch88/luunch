@@ -151,22 +151,11 @@ function buildCard(place) {
   footer.appendChild(actions);
   body.appendChild(footer);
 
-  if (!claimed) {
-    const claimButton = createEl('button', 'btn-claim', 'Är detta din restaurang? Lägg till meny gratis');
-    claimButton.type = 'button';
-    body.appendChild(claimButton);
-  }
-
   card.appendChild(body);
 
   card.querySelector('.btn-fav')?.addEventListener('click', event => {
     event.stopPropagation();
     toggleFavorite(osmId, name, address, emoji);
-  });
-
-  card.querySelector('.btn-claim')?.addEventListener('click', event => {
-    event.stopPropagation();
-    openClaim(osmId, name, address, Number.isFinite(lat) ? lat : 0, Number.isFinite(lon) ? lon : 0);
   });
 
   return card;
@@ -381,18 +370,6 @@ function showDeals() {
       <p>Restauranger kan snart lägga till<br>luncherbjudanden här.</p>
     </div>`;
   setStatus('');
-}
-
-function openClaim(osmId, name, address, lat, lon) {
-  const params = new URLSearchParams({
-    mode: 'signup',
-    restaurant_id: osmId,
-    restaurant_name: name
-  });
-  if (address) params.set('address', address);
-  if (Number.isFinite(lat)) params.set('lat', String(lat));
-  if (Number.isFinite(lon)) params.set('lon', String(lon));
-  window.location.href = `/dashboard.html?${params.toString()}`;
 }
 
 async function loadNearby() {
