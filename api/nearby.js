@@ -4,7 +4,7 @@ import { applyCors } from './_cors.js';
 const TTL_MS = 6 * 60 * 60 * 1000;
 const GRID_SIZE = 0.005;
 const MAX_RESULTS = 30;
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 2;
 const OVERPASS_TIMEOUT_MS = 8000;
 const OVERPASS_ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
@@ -117,13 +117,109 @@ function swedenNowParts() {
   };
 }
 
-function isOpenNow(hours, currentTime) {
-  if (!hours?.opens || !hours?.closes) return null;
-  const [oh, om] = hours.opens.split(':').map(Number);
-  const [ch, cm] = hours.closes.split(':').map(Number);
-  const openMin = oh * 60 + om;
-  const closeMin = ch * 60 + cm;
+function timeToMinutes(value) {
+  if (!/^\d{2}:\d{2}$/.test(String(value || ''))) return null;
+  const [hours, minutes] = value.split(':').map(Number);
+  if (hours > 23 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
+function isWithinTimeRange(opens, closes, currentTime) {
+  const openMin = timeToMinutes(opens);
+  const closeMin = timeToMinutes(closes);
+  if (openMin === null || closeMin === null) return null;
+  if (closeMin < openMin) {
+    return currentTime >= openMin || currentTime < closeMin;
+  }
   return currentTime >= openMin && currentTime < closeMin;
+}
+
+function getLuunchHoursStatus(hours, currentTime) {
+  if (!hours) {
+    return {
+      today_hours: null,
+      is_open_now: null,
+      open_status: 'unknown'
+    };
+  }
+
+  const opens = hours.lunch_opens || hours.opens;
+  const closes = hours.lunch_closes || hours.closes;
+  const isOpen = isWithinTimeRange(opens, closes, currentTime);
+  if (isOpen === null) {
+    return {
+      today_hours: null,
+      is_open_now: null,
+      open_status: 'unknown'
+    };
+  }
+
+  return {
+    today_hours: `${opens}-${closes}`,
+    is_open_now: isOpen,
+    open_status: isOpen ? 'open' : 'closed'
+  };
+}
+
+function getOsmOpeningStatus(openingHoursRaw, currentTime) {
+  if (!openingHoursRaw) {
+    return {
+      today_hours: null,
+      is_open_now: null,
+      open_status: 'unknown'
+    };
+  }
+
+  const raw = String(openingHoursRaw).trim();
+  if (/^24\/7$/i.test(raw)) {
+    return {
+      today_hours: '00:00-24:00',
+      is_open_now: true,
+      open_status: 'open'
+    };
+  }
+
+  // Conservative parser: only plain daily ranges like "11:00-14:00".
+  const simpleRange = raw.match(/^(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})$/);
+  if (simpleRange) {
+    const [, opens, closes] = simpleRange;
+    const isOpen = isWithinTimeRange(opens, closes, currentTime);
+    if (isOpen !== null) {
+      return {
+        today_hours: `${opens}-${closes}`,
+        is_open_now: isOpen,
+        open_status: isOpen ? 'open' : 'closed'
+      };
+    }
+  }
+
+  return {
+    today_hours: null,
+    is_open_now: null,
+    open_status: 'unknown'
+  };
+}
+
+async function fetchOpeningHours(restaurantIds, dayIndex) {
+  const withLunchColumns = await supabase
+    .from('opening_hours')
+    .select('restaurant_id, opens, closes, lunch_opens, lunch_closes')
+    .in('restaurant_id', restaurantIds)
+    .eq('day_of_week', dayIndex);
+
+  if (!withLunchColumns.error) return withLunchColumns.data || [];
+
+  console.warn('[nearby] opening_hours lunch columns saknas eller kunde inte läsas. Faller tillbaka.', {
+    message: withLunchColumns.error.message
+  });
+
+  const fallback = await supabase
+    .from('opening_hours')
+    .select('restaurant_id, opens, closes')
+    .in('restaurant_id', restaurantIds)
+    .eq('day_of_week', dayIndex);
+
+  return fallback.data || [];
 }
 
 async function readDbSnapshot(cacheKey) {
@@ -219,12 +315,8 @@ async function getClaimedData(osmIds) {
     if (!restaurants?.length) return claimed;
 
     const restaurantIds = restaurants.map(r => r.id);
-    const [{ data: hours }, { data: menus }] = await Promise.all([
-      supabase
-        .from('opening_hours')
-        .select('restaurant_id, opens, closes')
-        .in('restaurant_id', restaurantIds)
-        .eq('day_of_week', dayIndex),
+    const [hours, { data: menus }] = await Promise.all([
+      fetchOpeningHours(restaurantIds, dayIndex),
       supabase
         .from('menus')
         .select('restaurant_id, description, price')
@@ -242,16 +334,24 @@ async function getClaimedData(osmIds) {
 
     for (const restaurant of restaurants) {
       const todayHours = hoursByRestaurant.get(restaurant.id);
-      claimed.set(restaurant.osm_id, {
+      const hoursStatus = getLuunchHoursStatus(todayHours, currentTime);
+      const claimedRestaurant = {
         claimed: true,
         verified: restaurant.verified,
         phone: restaurant.phone,
         address: restaurant.address,
-        is_open_now: isOpenNow(todayHours, currentTime),
-        today_opens: todayHours?.opens || null,
-        today_closes: todayHours?.closes || null,
         dishes: menusByRestaurant.get(restaurant.id) || []
-      });
+      };
+
+      if (todayHours) {
+        claimedRestaurant.is_open_now = hoursStatus.is_open_now;
+        claimedRestaurant.open_status = hoursStatus.open_status;
+        claimedRestaurant.today_hours = hoursStatus.today_hours;
+        claimedRestaurant.today_opens = todayHours?.lunch_opens || todayHours?.opens || null;
+        claimedRestaurant.today_closes = todayHours?.lunch_closes || todayHours?.closes || null;
+      }
+
+      claimed.set(restaurant.osm_id, claimedRestaurant);
     }
   } catch (e) {
     return claimed;
@@ -262,6 +362,7 @@ async function getClaimedData(osmIds) {
 
 async function buildPayload(lat, lon, category) {
   const elements = await fetchOverpass(lat, lon);
+  const { currentTime } = swedenNowParts();
   const baseRestaurants = elements
     .filter(e => e.tags?.name)
     .map(e => {
@@ -269,6 +370,7 @@ async function buildPayload(lat, lon, category) {
       const itemLon = e.lon || e.center?.lon;
       const tags = e.tags || {};
       const id = `${e.type}/${e.id}`;
+      const openingStatus = getOsmOpeningStatus(tags.opening_hours, currentTime);
       return {
         id,
         osm_id: id,
@@ -280,9 +382,12 @@ async function buildPayload(lat, lon, category) {
         type_label: getTypeLabel(tags),
         emoji: getEmoji(tags),
         distance_m: itemLat && itemLon ? Math.round(haversine(lat, lon, itemLat, itemLon)) : 999999,
+        opening_hours_raw: tags.opening_hours || null,
+        today_hours: openingStatus.today_hours,
+        is_open_now: openingStatus.is_open_now,
+        open_status: openingStatus.open_status,
         claimed: false,
         verified: false,
-        is_open_now: null,
         today_opens: null,
         today_closes: null,
         dishes: [],
@@ -293,7 +398,6 @@ async function buildPayload(lat, lon, category) {
   const claimedData = await getClaimedData(baseRestaurants.map(r => r.osm_id));
   const restaurants = baseRestaurants
     .map(restaurant => ({ ...restaurant, ...(claimedData.get(restaurant.osm_id) || {}) }))
-    .filter(restaurant => restaurant.is_open_now !== false)
     .filter(restaurant => matchesCategory(restaurant, category))
     .sort((a, b) => a.distance_m - b.distance_m)
     .slice(0, MAX_RESULTS);
