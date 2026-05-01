@@ -41,7 +41,7 @@ export default async function handler(req, res) {
     if (!token) {
       return res.status(401).json({
         ok: false,
-        error: 'Du måste vara inloggad för att claima restaurang'
+        error: 'Du måste vara inloggad för att ansöka om restaurang'
       });
     }
 
@@ -50,90 +50,103 @@ export default async function handler(req, res) {
     if (authError || !user) {
       return res.status(401).json({
         ok: false,
-        error: 'Du måste vara inloggad för att claima restaurang'
+        error: 'Du måste vara inloggad för att ansöka om restaurang'
       });
     }
 
     const {
-      restaurant_id,
+      restaurant_id = null,
       restaurant_name,
       address = null,
-      lat = null,
-      lon = null
+      phone = null,
+      website = null,
+      message = null
     } = req.body || {};
 
-    if (!restaurant_id) {
-      return res.status(400).json({ ok: false, error: 'restaurant_id krävs' });
+    if (!restaurant_name) {
+      return res.status(400).json({ ok: false, error: 'restaurant_name krävs' });
     }
 
-    const { data: existing, error: existingError } = await supabase
-      .from('restaurants')
-      .select('id, osm_id, name, address, lat, lon, verified, claimed_by_user_id, claim_email')
-      .eq('osm_id', restaurant_id)
+    if (restaurant_id) {
+      const { data: existing, error: existingError } = await supabase
+        .from('restaurants')
+        .select('id, osm_id, claimed_by_user_id')
+        .eq('osm_id', restaurant_id)
+        .maybeSingle();
+
+      if (existingError) {
+        console.error('[claim] Failed to read restaurant', {
+          message: existingError.message,
+          restaurant_id
+        });
+        return res.status(500).json({ ok: false, error: 'Kunde inte kontrollera restaurangen' });
+      }
+
+      if (existing?.claimed_by_user_id && existing.claimed_by_user_id !== user.id) {
+        return res.status(409).json({
+          ok: false,
+          error: 'Den här restaurangen är redan claimad. Kontakta support om detta är fel.'
+        });
+      }
+    }
+
+    const { data: pendingClaim, error: pendingError } = await supabase
+      .from('claims')
+      .select('id, status, restaurant_name')
+      .eq('user_id', user.id)
+      .eq('status', 'pending')
       .maybeSingle();
 
-    if (existingError) {
-      console.error('[claim] Failed to read restaurant', {
-        message: existingError.message,
-        restaurant_id
-      });
-      return res.status(500).json({ ok: false, error: 'Kunde inte kontrollera restaurangen' });
-    }
-
-    if (existing?.claimed_by_user_id && existing.claimed_by_user_id !== user.id) {
-      return res.status(409).json({
-        ok: false,
-        error: 'Den här restaurangen är redan claimad. Kontakta support om detta är fel.'
-      });
-    }
-
-    if (existing?.claimed_by_user_id === user.id) {
-      return res.status(200).json({
-        ok: true,
-        message: 'Restaurangen är claimad',
-        restaurant: existing
-      });
-    }
-
-    const claimFields = {
-      osm_id: restaurant_id,
-      name: restaurant_name || existing?.name || 'Restaurang',
-      address: address || existing?.address || null,
-      lat: Number.isFinite(Number(lat)) ? Number(lat) : null,
-      lon: Number.isFinite(Number(lon)) ? Number(lon) : null,
-      claimed: true,
-      claimed_by_user_id: user.id,
-      claim_email: user.email,
-      email: user.email,
-      claimed_at: new Date().toISOString(),
-      verified: existing?.verified || false
-    };
-
-    const query = existing
-      ? supabase.from('restaurants').update(claimFields).eq('id', existing.id)
-      : supabase.from('restaurants').insert(claimFields);
-
-    const { data: restaurant, error: claimError } = await query.select().single();
-
-    if (claimError) {
-      console.error('[claim] Failed to claim restaurant', {
-        message: claimError.message,
-        restaurant_id,
+    if (pendingError) {
+      console.error('[claim] Failed to read pending claim', {
+        message: pendingError.message,
         user_id: user.id
       });
-      return res.status(500).json({ ok: false, error: 'Kunde inte claima restaurangen' });
+      return res.status(500).json({ ok: false, error: 'Kunde inte kontrollera ansökan' });
     }
 
-    return res.status(200).json({
+    if (pendingClaim) {
+      return res.status(409).json({
+        ok: false,
+        error: 'Du har redan en ansökan som väntar på granskning.'
+      });
+    }
+
+    const { data: claim, error: insertError } = await supabase
+      .from('claims')
+      .insert({
+        user_id: user.id,
+        email: user.email,
+        restaurant_id,
+        restaurant_name,
+        address,
+        phone,
+        website,
+        message,
+        status: 'pending'
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error('[claim] Failed to create claim request', {
+        message: insertError.message,
+        user_id: user.id,
+        restaurant_name
+      });
+      return res.status(500).json({ ok: false, error: 'Kunde inte skicka ansökan' });
+    }
+
+    return res.status(201).json({
       ok: true,
-      message: 'Restaurangen är claimad',
-      restaurant
+      message: 'Tack! Din ansökan är skickad. Vi granskar den manuellt och återkommer.',
+      claim
     });
   } catch (e) {
     console.error('[claim] Handler error', {
       message: e.message,
       stack: e.stack
     });
-    return res.status(500).json({ ok: false, error: 'Kunde inte claima restaurangen' });
+    return res.status(500).json({ ok: false, error: 'Kunde inte skicka ansökan' });
   }
 }
