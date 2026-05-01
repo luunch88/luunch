@@ -3,6 +3,7 @@ let filteredRestaurants = [];
 let fallbackRestaurants = [];
 let activeFilter = 'alla';
 let openNowActive = false;
+let currentView = 'find';
 let userLat = null;
 let userLon = null;
 const MAX_DISTANCE_METERS = 800;
@@ -210,6 +211,40 @@ function countText(count, category) {
     : `${count} ${label} nära dig`;
 }
 
+function setActiveNav(view) {
+  currentView = view;
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const activeId = { find: 'navHome', saved: 'navSaved', deals: 'navDeals' }[view];
+  document.getElementById(activeId)?.classList.add('active');
+}
+
+function setFindControlsVisible(isVisible) {
+  const display = isVisible ? '' : 'none';
+  document.querySelector('.hero').style.display = display;
+  document.querySelector('.locate-wrap').style.display = display;
+  document.querySelector('.filter-wrap').style.display = display;
+  document.querySelector('.status-bar').style.display = display;
+}
+
+function renderFindStartState() {
+  const container = document.getElementById('results');
+  const header = document.getElementById('sectionHeader');
+  header.style.display = 'none';
+  container.innerHTML = '';
+  hideNotice();
+  setStatus('Väntar på plats…');
+}
+
+function showFind() {
+  setActiveNav('find');
+  setFindControlsVisible(true);
+  if (allRestaurants.length > 0) {
+    renderRestaurantState();
+  } else {
+    renderFindStartState();
+  }
+}
+
 function renderRestaurantState() {
   const container = document.getElementById('results');
   const header = document.getElementById('sectionHeader');
@@ -284,13 +319,14 @@ function toggleFavorite(osmId, name, address, emoji) {
 }
 
 function showSaved() {
+  setActiveNav('saved');
+  setFindControlsVisible(false);
+  hideNotice();
+
   const favs = getFavorites();
   const container = document.getElementById('results');
   const header = document.getElementById('sectionHeader');
   const countEl = document.getElementById('sectionCount');
-
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  document.getElementById('navSaved').classList.add('active');
 
   container.innerHTML = '';
   if (favs.length === 0) {
@@ -334,8 +370,9 @@ function removeFav(osmId, card) {
 }
 
 function showDeals() {
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  document.getElementById('navDeals').classList.add('active');
+  setActiveNav('deals');
+  setFindControlsVisible(false);
+  hideNotice();
   document.getElementById('sectionHeader').style.display = 'none';
   document.getElementById('results').innerHTML = `
     <div class="empty-state">
@@ -408,6 +445,7 @@ async function loadNearby() {
 }
 
 async function filterChip(el, type) {
+  if (currentView !== 'find') showFind();
   document.querySelectorAll('.filters .chip:not(#openNowChip)').forEach(c => c.classList.remove('active'));
   el.classList.add('active');
   activeFilter = type;
@@ -426,6 +464,7 @@ async function filterChip(el, type) {
 }
 
 function toggleOpenNow(el) {
+  if (currentView !== 'find') showFind();
   openNowActive = !openNowActive;
   el.classList.toggle('active', openNowActive);
   renderRestaurantState();
@@ -440,8 +479,8 @@ async function locate() {
     return;
   }
 
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  document.getElementById('navHome')?.classList.add('active');
+  setActiveNav('find');
+  setFindControlsVisible(true);
 
   btn.classList.add('loading');
   label.textContent = 'Hämtar din plats…';
