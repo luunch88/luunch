@@ -80,7 +80,19 @@ async function submitClaimRequest(claimPayload) {
       },
       body: JSON.stringify(claimPayload)
     });
-    const data = await res.json();
+    const text = await res.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      data = { ok: false, error: text || 'Non-JSON response' };
+    }
+    console.log('[claim] request payload:', claimPayload);
+    console.log('[claim] response:', {
+      status: res.status,
+      ok: res.ok,
+      data
+    });
     if (!res.ok || data.ok === false) {
       throw new Error('Kunde inte skicka ansökan just nu. Försök igen.');
     }
