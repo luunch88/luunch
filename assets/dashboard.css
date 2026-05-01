@@ -47,6 +47,9 @@ header {
 .form-textarea { min-height: 92px; resize: vertical; line-height: 1.45; }
 .form-input:focus { border-color: var(--accent); }
 .form-hint { font-size: 0.75rem; color: var(--ink2); margin-bottom: 20px; line-height: 1.5; }
+.field-help { font-size: 0.72rem; color: var(--ink2); line-height: 1.45; margin: -8px 0 10px; }
+.field-error { min-height: 14px; margin: -10px 0 12px; color: var(--red); font-size: 0.74rem; line-height: 1.35; }
+.form-input.has-error { border-color: rgba(224,82,82,0.8); }
 
 .btn-primary { width: 100%; background: var(--accent); color: white; border: none; border-radius: var(--radius-sm); padding: 14px; font-size: 0.9rem; font-weight: 600; cursor: pointer; font-family: 'Plus Jakarta Sans', sans-serif; transition: opacity 0.15s; display: flex; align-items: center; justify-content: center; gap: 8px; }
 .btn-primary:disabled { opacity: 0.6; cursor: default; }
@@ -70,6 +73,10 @@ header {
 .section-status { font-size: 0.72rem; font-weight: 600; padding: 3px 9px; border-radius: 99px; }
 .section-status.set { background: rgba(76,175,125,0.12); color: var(--green); }
 .section-status.missing { background: rgba(240,101,26,0.12); color: var(--accent); }
+.readonly-list { display: grid; gap: 10px; margin-top: 14px; }
+.readonly-row { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; }
+.readonly-label { color: var(--ink2); font-size: 0.66rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 4px; }
+.readonly-value { color: var(--ink); font-size: 0.86rem; line-height: 1.45; overflow-wrap: anywhere; }
 
 /* Menu form */
 .menu-preview { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 14px; }
