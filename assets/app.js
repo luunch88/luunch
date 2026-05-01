@@ -2,6 +2,7 @@ let allRestaurants = [];
 let filteredRestaurants = [];
 let fallbackRestaurants = [];
 let activeFilter = 'alla';
+let openNowActive = false;
 let userLat = null;
 let userLon = null;
 const MAX_DISTANCE_METERS = 800;
@@ -48,22 +49,21 @@ function buildCard(place) {
   const typeLabel = place.type_label || place.category || 'Restaurang';
   const address = place.address || '';
   const dishes = Array.isArray(place.dishes) ? place.dishes : [];
-  const hasHours = !!place.today_opens;
-  const isOpen = place.is_open_now;
+  const todayHours = place.today_hours || (place.today_opens && place.today_closes ? `${place.today_opens}-${place.today_closes}` : null);
+  const openStatus = place.open_status || 'unknown';
   const claimed = !!place.claimed;
   const mapsUrl = Number.isFinite(lat) && Number.isFinite(lon)
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lat},${lon}`)}`
     : '#';
 
-  const hoursHtml = hasHours
-    ? `<div class="card-today-hours">🕐 Idag ${escapeHtml(place.today_opens)}–${escapeHtml(place.today_closes)}</div>`
-    : '';
+  const hoursText = todayHours || place.opening_hours_raw || 'Öppettider saknas';
+  const hoursHtml = `<div class="card-today-hours">🕐 ${escapeHtml(hoursText)}</div>`;
 
-  const openBadge = !claimed ? '' : isOpen === true
+  const openBadge = openStatus === 'open'
     ? '<span class="badge badge-open">● Öppet nu</span>'
-    : isOpen === false
-    ? '<span class="badge badge-closed">● Stängt</span>'
-    : '';
+    : openStatus === 'closed'
+    ? '<span class="badge badge-closed">● Stängt nu</span>'
+    : '<span class="badge badge-type">● Öppettider saknas</span>';
 
   const menuHtml = dishes.length > 0
     ? `<div class="card-menu">
@@ -92,7 +92,7 @@ function buildCard(place) {
       ${hoursHtml}
       <div class="card-missing-wrap">
         ${dishes.length === 0 ? '<span class="card-missing">🍽️ Ingen meny tillagd</span>' : ''}
-        ${!claimed || (!hasHours && claimed) ? '<span class="card-missing">🕐 Inga öppettider inlagda</span>' : ''}
+        ${openStatus === 'unknown' ? '<span class="card-missing">🕐 Öppettider saknas</span>' : ''}
       </div>
       <div class="card-footer">
         <div class="card-address">${escapeHtml(address || 'Se på karta')}</div>
@@ -149,7 +149,9 @@ function categoryLabel(category) {
 
 function countText(count, category) {
   const label = categoryLabel(category);
-  return `${count} ${label} nära dig`;
+  return openNowActive
+    ? `${count} bekräftat öppna ${label} nära dig`
+    : `${count} ${label} nära dig`;
 }
 
 function renderRestaurantState() {
@@ -158,7 +160,8 @@ function renderRestaurantState() {
 
   filteredRestaurants = filterRestaurants(allRestaurants, {
     category: activeFilter,
-    maxDistanceMeters: MAX_DISTANCE_METERS
+    maxDistanceMeters: MAX_DISTANCE_METERS,
+    openNow: openNowActive
   });
 
   if (filteredRestaurants.length > 0) {
@@ -170,9 +173,27 @@ function renderRestaurantState() {
   }
 
   if (allRestaurants.length > 0) {
-    fallbackRestaurants = sortByDistance(allRestaurants).slice(0, FALLBACK_LIMIT);
+    const nearbyCategoryMatches = filterRestaurants(allRestaurants, {
+      category: activeFilter,
+      maxDistanceMeters: MAX_DISTANCE_METERS,
+      openNow: false
+    });
+    const unknownAlternatives = nearbyCategoryMatches.filter(restaurant => restaurant.open_status === 'unknown');
+    fallbackRestaurants = sortByDistance(openNowActive ? unknownAlternatives : nearbyCategoryMatches).slice(0, FALLBACK_LIMIT);
     const filterText = activeFilter === 'alla' ? 'restauranger' : categoryLabel(activeFilter);
-    const message = `Inga ${filterText} inom ${MAX_DISTANCE_METERS} m – visar ${fallbackRestaurants.length} närmaste alternativ.`;
+
+    if (fallbackRestaurants.length === 0) {
+      hideNotice();
+      header.style.display = 'none';
+      container.innerHTML = '';
+      renderEmpty(container, 'Inga träffar', `Vi hittade inga ${filterText} inom ${MAX_DISTANCE_METERS} m.`);
+      setStatus('Inga resultat', '');
+      return;
+    }
+
+    const message = openNowActive
+      ? `Vi hittade inga bekräftat öppna ${filterText} nära dig – visar ${fallbackRestaurants.length} närmaste med okända öppettider.`
+      : `Inga ${filterText} inom ${MAX_DISTANCE_METERS} m – visar ${fallbackRestaurants.length} närmaste alternativ.`;
     showInfo(message);
     renderList(fallbackRestaurants);
     setStatus(message, '');
@@ -327,7 +348,7 @@ async function loadNearby() {
 }
 
 async function filterChip(el, type) {
-  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  document.querySelectorAll('.filters .chip:not(#openNowChip)').forEach(c => c.classList.remove('active'));
   el.classList.add('active');
   activeFilter = type;
   if (allRestaurants.length > 0) {
@@ -342,6 +363,12 @@ async function filterChip(el, type) {
   } else {
     renderRestaurantState();
   }
+}
+
+function toggleOpenNow(el) {
+  openNowActive = !openNowActive;
+  el.classList.toggle('active', openNowActive);
+  renderRestaurantState();
 }
 
 async function locate() {
