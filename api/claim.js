@@ -128,28 +128,6 @@ export default async function handler(req, res) {
       return res.status(400).json({ ok: false, error: 'organization_number har ogiltigt format' });
     }
 
-    if (payload.restaurant_id) {
-      const { data: existing, error: existingError } = await supabase
-        .from('restaurants')
-        .select('id, osm_id, claimed_by_user_id')
-        .eq('osm_id', payload.restaurant_id)
-        .maybeSingle();
-
-      if (existingError) {
-        console.error('[claim] Failed to read restaurant', {
-          message: existingError.message,
-          restaurant_id: payload.restaurant_id
-        });
-        return res.status(500).json({ ok: false, error: 'Kunde inte kontrollera restaurangen' });
-      }
-
-      if (existing?.claimed_by_user_id && existing.claimed_by_user_id !== user.id) {
-        return res.status(409).json({
-          ok: false,
-          error: 'Den här restaurangen är redan claimad. Kontakta support om detta är fel.'
-        });
-      }
-    }
     const { data: pendingClaim, error: pendingError } = await supabase
       .from('claims')
       .select('id, status, restaurant_name')
