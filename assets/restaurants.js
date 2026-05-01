@@ -67,7 +67,9 @@
       const withinDistance = !Number.isFinite(maxDistanceMeters) ||
         (Number.isFinite(distance) && distance <= maxDistanceMeters);
       const categoryMatches = matchFilter(restaurant, category);
-      const openMatches = !openNow || restaurant.open_status === 'open';
+      const hasOwnHours = (restaurant.claimed === true || restaurant.verified === true) &&
+        restaurant.has_luunch_hours === true;
+      const openMatches = !openNow || (hasOwnHours && restaurant.open_status === 'open');
       return withinDistance && categoryMatches && openMatches;
     });
   }
