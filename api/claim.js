@@ -2,12 +2,26 @@ import { createClient } from '@supabase/supabase-js';
 import { applyCors } from './_cors.js';
 
 const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabase = supabaseUrl && supabaseServiceKey
   ? createClient(supabaseUrl, supabaseServiceKey)
   : null;
 
 const ALLOWED_STATUSES = new Set(['pending', 'approved', 'rejected']);
+const CLAIM_COLUMNS = [
+  'restaurant_name',
+  'address',
+  'postal_code',
+  'city',
+  'restaurant_type',
+  'contact_person',
+  'email',
+  'phone',
+  'website',
+  'organization_number',
+  'message',
+  'status'
+];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const POSTAL_CODE_RE = /^\d{3}\s?\d{2}$/;
 const ORGANIZATION_NUMBER_RE = /^\d{6}-?\d{4}$/;
@@ -23,13 +37,13 @@ function optionalText(value) {
 
 function validatePayload(payload) {
   const required = [
-    ['restaurant_name', 'Restaurangnamn krävs'],
-    ['address', 'Adress krävs'],
-    ['postal_code', 'Postnummer krävs'],
-    ['city', 'Ort krävs'],
-    ['restaurant_type', 'Typ av restaurang krävs'],
-    ['contact_person', 'Kontaktperson krävs'],
-    ['email', 'E-post krävs']
+    ['restaurant_name', 'Restaurangnamn krÃ¤vs'],
+    ['address', 'Adress krÃ¤vs'],
+    ['postal_code', 'Postnummer krÃ¤vs'],
+    ['city', 'Ort krÃ¤vs'],
+    ['restaurant_type', 'Typ av restaurang krÃ¤vs'],
+    ['contact_person', 'Kontaktperson krÃ¤vs'],
+    ['email', 'E-post krÃ¤vs']
   ];
 
   for (const [field, message] of required) {
@@ -41,11 +55,31 @@ function validatePayload(payload) {
   }
 
   if (!EMAIL_RE.test(payload.email)) {
-    return 'E-postadressen är ogiltig';
+    return 'E-postadressen Ã¤r ogiltig';
   }
 
   if (payload.organization_number && !ORGANIZATION_NUMBER_RE.test(payload.organization_number)) {
     return 'Organisationsnummer ska vara 556123-4567 eller 5561234567';
+  }
+
+  return null;
+}
+
+async function assertClaimsSchema() {
+  const { error } = await supabase
+    .from('claims')
+    .select(CLAIM_COLUMNS.join(','))
+    .limit(1);
+
+  if (error) {
+    console.error('[claim] claims schema/table check failed', {
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code,
+      expectedColumns: CLAIM_COLUMNS
+    });
+    return error;
   }
 
   return null;
@@ -59,19 +93,18 @@ export default async function handler(req, res) {
   }
   if (req.method === 'OPTIONS') return res.status(200).json({ ok: true });
   if (req.method !== 'POST') {
-    return res.status(405).json({ ok: false, error: 'Endast POST stöds' });
+    return res.status(405).json({ ok: false, error: 'Endast POST stÃ¶ds' });
   }
 
   try {
     if (!supabase) {
       console.error('[claim] Missing Supabase env', {
         hasSupabaseUrl: Boolean(supabaseUrl),
-        hasServiceRoleKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
-        hasLegacyServiceKey: Boolean(process.env.SUPABASE_SERVICE_KEY)
+        hasServiceRoleKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY)
       });
       return res.status(500).json({
         ok: false,
-        error: 'Supabase är inte konfigurerat för ansökningar'
+        error: 'Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY'
       });
     }
 
@@ -100,6 +133,15 @@ export default async function handler(req, res) {
       return res.status(400).json({ ok: false, error: 'Ogiltig status' });
     }
 
+    const schemaError = await assertClaimsSchema();
+    if (schemaError) {
+      return res.status(500).json({
+        ok: false,
+        error: schemaError.message,
+        details: schemaError
+      });
+    }
+
     const { error } = await supabase
       .from('claims')
       .insert(payload);
@@ -108,26 +150,30 @@ export default async function handler(req, res) {
       console.error('[claim] Supabase insert failed', {
         message: error.message,
         details: error.details,
-        hint: error.hint
+        hint: error.hint,
+        code: error.code,
+        payload
       });
       return res.status(500).json({
         ok: false,
-        error: 'Kunde inte spara ansökan'
+        error: error.message,
+        details: error
       });
     }
 
     return res.status(201).json({
       ok: true,
-      message: 'Ansökan mottagen'
+      message: 'AnsÃ¶kan mottagen'
     });
-  } catch (e) {
+  } catch (err) {
     console.error('[claim] Handler error', {
-      message: e.message,
-      stack: e.stack
+      message: err.message,
+      stack: err.stack
     });
     return res.status(500).json({
       ok: false,
-      error: 'Kunde inte spara ansökan'
+      error: err.message || 'Server error'
     });
   }
 }
+
