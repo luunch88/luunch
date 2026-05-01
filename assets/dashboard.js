@@ -10,6 +10,7 @@ let currentRestaurant = null;
 let pendingClaim = null;
 let claimInProgress = false;
 let recentClaimName = null;
+let currentUser = null;
 
 function getPendingClaimFromUrl() {
   const params = new URLSearchParams(window.location.search);
@@ -95,6 +96,60 @@ async function claimPendingRestaurant(session) {
   return data.restaurant || null;
 }
 
+function showPage(pageId) {
+  document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
+  document.getElementById(pageId).classList.add('active');
+}
+
+function manualRestaurantId(name, userId) {
+  const slug = name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 60) || 'restaurang';
+  return `manual/${userId}/${slug}`;
+}
+
+async function applyRestaurant() {
+  if (!currentUser) return;
+  const name = document.getElementById('applyName').value.trim();
+  const address = document.getElementById('applyAddress').value.trim();
+  const btn = document.getElementById('applyBtn');
+  if (!name) {
+    showMsg('applyMsg', 'Ange restaurangnamn.', 'error');
+    return;
+  }
+
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) {
+    showMsg('applyMsg', 'Du måste vara inloggad för att ansöka.', 'error');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner-sm"></div> Skickar…';
+
+  try {
+    pendingClaim = {
+      restaurant_id: manualRestaurantId(name, currentUser.id),
+      restaurant_name: name,
+      address: address || null
+    };
+    recentClaimName = name;
+    await claimPendingRestaurant(session);
+    pendingClaim = null;
+    showMsg('applyMsg', `✓ Klart! Du hanterar nu ${name}.`, 'success');
+    await loadDashboard(currentUser);
+  } catch (e) {
+    showMsg('applyMsg', e.message, 'error');
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = 'Ansök om restaurang';
+}
+
 // ── Login ──
 async function login() {
   const email = document.getElementById('loginEmail').value.trim();
@@ -169,6 +224,7 @@ async function handleSession(session, msgId = 'loginMsg') {
 
 // ── Load dashboard ──
 async function loadDashboard(user) {
+  currentUser = user;
   // Hämta restaurang kopplad till denna användare
   const { data: restaurant } = await sb
     .from('restaurants')
@@ -179,7 +235,7 @@ async function loadDashboard(user) {
     .maybeSingle();
 
   if (!restaurant) {
-    showMsg('loginMsg', 'Ingen restaurang är kopplad till ditt konto ännu. Claima din restaurang från luunch.se först.', 'error');
+    showPage('pageApply');
     return;
   }
 
@@ -216,8 +272,7 @@ async function loadDashboard(user) {
   }
 
   // Visa dashboard
-  document.getElementById('pageLogin').classList.remove('active');
-  document.getElementById('pageDash').classList.add('active');
+  showPage('pageDash');
 }
 
 // ── Dishes state ──
@@ -309,8 +364,8 @@ async function saveHours() {
 async function logout() {
   await sb.auth.signOut();
   currentRestaurant = null;
-  document.getElementById('pageDash').classList.remove('active');
-  document.getElementById('pageLogin').classList.add('active');
+  currentUser = null;
+  showPage('pageLogin');
 }
 
 // ── Helper ──
