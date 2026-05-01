@@ -60,15 +60,40 @@
   <div class="section-card">
     <div class="section-card-header">
       <div class="section-card-title">🏪 Restaurang</div>
-      <div class="section-status missing">Ej claimad</div>
+      <div class="section-status missing">Ej ansökt</div>
     </div>
     <label class="form-label">Restaurangnamn</label>
     <input class="form-input" id="applyName" type="text" placeholder="T.ex. Pizzeria Centro">
     <label class="form-label">Adress</label>
     <input class="form-input" id="applyAddress" type="text" placeholder="Gata och nummer">
+    <label class="form-label">Telefon</label>
+    <input class="form-input" id="applyPhone" type="tel" placeholder="Valfritt">
+    <label class="form-label">Hemsida</label>
+    <input class="form-input" id="applyWebsite" type="url" placeholder="Valfritt">
+    <label class="form-label">Kommentar</label>
+    <textarea class="form-input form-textarea" id="applyMessage" placeholder="Berätta gärna kort varför du ansöker"></textarea>
     <button class="btn-primary" id="applyBtn" onclick="applyRestaurant()">Ansök om restaurang</button>
     <div id="applyMsg"></div>
     <p class="form-hint">Sökfunktionen blir mer exakt snart. Just nu skickar du in restaurangen manuellt.</p>
+  </div>
+
+  <div class="divider"></div>
+  <button class="btn-logout" onclick="logout()">Logga ut</button>
+</div>
+
+<!-- PENDING CLAIM PAGE -->
+<div class="page" id="pagePending">
+  <div class="dash-greeting">
+    <h2>Ansökan väntar på granskning</h2>
+    <p id="pendingSub">Vi granskar din ansökan manuellt och återkommer.</p>
+  </div>
+
+  <div class="section-card">
+    <div class="section-card-header">
+      <div class="section-card-title">⏳ Status</div>
+      <div class="section-status missing">Pending</div>
+    </div>
+    <p class="form-hint">Tack! Din ansökan är skickad. Vi granskar den manuellt och återkommer.</p>
   </div>
 
   <div class="divider"></div>
