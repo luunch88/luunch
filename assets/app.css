@@ -40,6 +40,8 @@ header {
 .logo span { color: var(--accent); }
 
 .header-right { display: flex; align-items: center; gap: 10px; }
+.owner-link { color: var(--ink2); text-decoration: none; font-size: 0.72rem; font-weight: 700; border: 1px solid var(--border); background: rgba(242,237,228,0.04); padding: 6px 10px; border-radius: 99px; white-space: nowrap; transition: border-color 0.15s, color 0.15s, background 0.15s; }
+.owner-link:hover { color: var(--accent); border-color: rgba(240,101,26,0.4); background: rgba(240,101,26,0.07); }
 .time-pill { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.06em; color: var(--ink2); background: var(--surface); border: 1px solid var(--border); padding: 5px 11px; border-radius: 99px; }
 .lunch-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink2); transition: background 0.4s; }
 .lunch-dot.active { background: var(--green); animation: blink 2s infinite; }
@@ -132,8 +134,6 @@ header {
 .btn-fav:hover { border-color: rgba(242,237,228,0.2); background: rgba(242,237,228,0.07); }
 .btn-fav.saved { color: #FF8A8A; border-color: rgba(255,138,138,0.24); background: rgba(255,138,138,0.08); }
 .btn-fav:active { transform: scale(0.92); }
-.btn-claim { width:100%; margin-top:10px; background:rgba(242,237,228,0.035); border:1px solid rgba(242,237,228,0.09); border-radius:var(--radius-sm); padding:10px 12px; font-size:0.78rem; font-weight:600; color:var(--ink2); cursor:pointer; font-family:'Plus Jakarta Sans',sans-serif; transition:all 0.15s; text-align:center; }
-.btn-claim:hover { border-color:rgba(240,101,26,0.45); color:var(--accent); background:rgba(240,101,26,0.06); }
 .badge-claimed { background:rgba(76,175,125,0.12); color:var(--green); }
 .card-hours { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:10px; }
 .card-hours span { font-size:0.72rem; color:var(--ink2); background:var(--surface2); padding:3px 8px; border-radius:99px; }
