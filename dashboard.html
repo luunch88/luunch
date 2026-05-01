@@ -50,6 +50,31 @@
   </div>
 </div>
 
+<!-- CLAIM/APPLY PAGE -->
+<div class="page" id="pageApply">
+  <div class="dash-greeting">
+    <h2>Ansök om din restaurang</h2>
+    <p>Hitta din restaurang i Luunch och koppla den till ditt konto.</p>
+  </div>
+
+  <div class="section-card">
+    <div class="section-card-header">
+      <div class="section-card-title">🏪 Restaurang</div>
+      <div class="section-status missing">Ej claimad</div>
+    </div>
+    <label class="form-label">Restaurangnamn</label>
+    <input class="form-input" id="applyName" type="text" placeholder="T.ex. Pizzeria Centro">
+    <label class="form-label">Adress</label>
+    <input class="form-input" id="applyAddress" type="text" placeholder="Gata och nummer">
+    <button class="btn-primary" id="applyBtn" onclick="applyRestaurant()">Ansök om restaurang</button>
+    <div id="applyMsg"></div>
+    <p class="form-hint">Sökfunktionen blir mer exakt snart. Just nu skickar du in restaurangen manuellt.</p>
+  </div>
+
+  <div class="divider"></div>
+  <button class="btn-logout" onclick="logout()">Logga ut</button>
+</div>
+
 <!-- DASHBOARD PAGE -->
 <div class="page" id="pageDash">
   <div class="dash-greeting">
