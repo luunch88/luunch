@@ -126,6 +126,7 @@ async function approveRestaurantClaim(supabase, claim, lat, lon) {
     claimed: true,
     verified: true,
     claimed_by_user_id: claim.user_id || null,
+    email: claim.email,
     claim_email: claim.email,
     claimed_at: now,
     lat,
