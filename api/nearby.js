@@ -415,8 +415,9 @@ async function getVerifiedManualRestaurants(lat, lon, category, radiusMeters) {
   try {
     const { data: restaurants, error } = await supabase
       .from('restaurants')
-      .select('id, osm_id, source, source_id, name, phone, address, postal_code, city, category, type, lat, lon, verified, claimed, claimed_by_user_id')
+      .select('id, osm_id, source, source_id, name, phone, address, postal_code, city, category, type, lat, lon, visible, verified, claimed, claimed_by_user_id')
       .eq('verified', true)
+      .eq('visible', true)
       .not('lat', 'is', null)
       .not('lon', 'is', null);
 
@@ -469,6 +470,7 @@ async function getVerifiedManualRestaurants(lat, lon, category, radiusMeters) {
           restaurant_id: restaurant.id,
           osm_id: restaurant.osm_id || restaurant.source_id || restaurant.id,
           source: restaurant.source || 'manual',
+          priority: 0,
           name: restaurant.name,
           lat: Number(restaurant.lat),
           lon: Number(restaurant.lon),
@@ -542,6 +544,7 @@ async function buildPayload(lat, lon, category, radiusMeters) {
       return {
         id,
         osm_id: id,
+        priority: 1,
         name: tags.name,
         lat: itemLat,
         lon: itemLon,
@@ -575,7 +578,7 @@ async function buildPayload(lat, lon, category, radiusMeters) {
     .filter(restaurant => matchesCategory(restaurant, category));
   const manualRestaurants = await getVerifiedManualRestaurants(lat, lon, category, radiusMeters);
   const restaurants = mergeVerifiedRestaurants(externalRestaurants, manualRestaurants)
-    .sort((a, b) => a.distance_m - b.distance_m)
+    .sort((a, b) => (a.priority ?? 1) - (b.priority ?? 1) || a.distance_m - b.distance_m)
     .slice(0, MAX_RESULTS);
 
   return {
