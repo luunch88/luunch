@@ -149,6 +149,15 @@
   async function updateClaim(id, status, adminNote, lat = '', lon = '') {
     setMsg('Uppdaterar ansökan...');
     try {
+      if (status === 'approved') {
+        const latitude = Number(lat);
+        const longitude = Number(lon);
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+          setMsg('Fyll i giltig latitude och longitude innan du godkänner.', 'error');
+          return;
+        }
+      }
+
       const data = await api('/api/admin/claims/update', {
         method: 'POST',
         body: JSON.stringify({
@@ -160,7 +169,7 @@
         })
       });
       await loadClaims();
-      if (data.message) setMsg(data.message, 'success');
+      setMsg(status === 'approved' ? 'Restaurang godkänd' : (data.message || 'Ansökan uppdaterad'), 'success');
     } catch (e) {
       setMsg(e.message, 'error');
     }
