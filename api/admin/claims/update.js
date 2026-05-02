@@ -28,6 +28,27 @@ function slugify(value) {
     .slice(0, 80) || 'restaurang';
 }
 
+function supabaseErrorPayload(error) {
+  return {
+    error: error?.message || 'Supabase error',
+    code: error?.code || null,
+    details: error?.details || null,
+    hint: error?.hint || null
+  };
+}
+
+function throwSupabaseError(label, error, meta = {}) {
+  console.error(label, {
+    ...supabaseErrorPayload(error),
+    ...meta
+  });
+
+  const wrapped = new Error(error?.message || 'Supabase error');
+  wrapped.supabaseError = error;
+  wrapped.status = 500;
+  throw wrapped;
+}
+
 async function findExistingRestaurant(supabase, claim) {
   const { data, error } = await supabase
     .from('restaurants')
@@ -38,13 +59,9 @@ async function findExistingRestaurant(supabase, claim) {
     .maybeSingle();
 
   if (error) {
-    console.error('[admin claims] restaurant lookup failed', {
-      message: error.message,
-      details: error.details,
-      hint: error.hint,
+    throwSupabaseError('[admin claims] restaurant lookup failed', error, {
       claim_id: claim.id
     });
-    throw new Error(error.message);
   }
 
   return data || null;
@@ -81,14 +98,11 @@ async function approveRestaurantClaim(supabase, claim, lat, lon) {
       .single();
 
     if (error) {
-      console.error('[admin claims] restaurant approve update failed', {
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
+      throwSupabaseError('[admin claims] restaurant approve update failed', error, {
         claim_id: claim.id,
-        restaurant_id: existing.id
+        restaurant_id: existing.id,
+        restaurantPatch
       });
-      throw new Error(error.message);
     }
 
     return data;
@@ -110,14 +124,10 @@ async function approveRestaurantClaim(supabase, claim, lat, lon) {
     .single();
 
   if (error) {
-    console.error('[admin claims] restaurant approve insert failed', {
-      message: error.message,
-      details: error.details,
-      hint: error.hint,
+    throwSupabaseError('[admin claims] restaurant approve insert failed', error, {
       claim_id: claim.id,
       insertPayload
     });
-    throw new Error(error.message);
   }
 
   return data;
@@ -146,8 +156,8 @@ export default async function handler(req, res) {
     const id = cleanText(req.body?.id);
     const status = cleanText(req.body?.status);
     const adminNote = cleanText(req.body?.admin_note);
-    const lat = optionalNumber(req.body?.lat);
-    const lon = optionalNumber(req.body?.lon);
+    const lat = optionalNumber(req.body?.lat ?? req.body?.latitude);
+    const lon = optionalNumber(req.body?.lon ?? req.body?.longitude);
 
     if (!id) return res.status(400).json({ ok: false, error: 'id krävs' });
     if (!VALID_STATUSES.has(status)) {
@@ -169,15 +179,16 @@ export default async function handler(req, res) {
         .from('claims')
         .select('id, user_id, restaurant_name, address, postal_code, city, restaurant_type, email, status')
         .eq('id', id)
-        .single();
+        .maybeSingle();
 
-      if (claimError || !claim) {
-        console.error('[admin claims] claim lookup before approve failed', {
-          message: claimError?.message,
-          details: claimError?.details,
-          hint: claimError?.hint,
-          id
+      if (claimError) {
+        return res.status(500).json({
+          ok: false,
+          ...supabaseErrorPayload(claimError)
         });
+      }
+
+      if (!claim) {
         return res.status(404).json({ ok: false, error: 'Ansökan hittades inte' });
       }
 
@@ -208,19 +219,30 @@ export default async function handler(req, res) {
 
     if (error) {
       console.error('[admin claims] update failed', {
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
+        ...supabaseErrorPayload(error),
         id,
         status
       });
-      return res.status(500).json({ ok: false, error: 'Kunde inte uppdatera ansökan' });
+      return res.status(500).json({
+        ok: false,
+        ...supabaseErrorPayload(error)
+      });
     }
 
     return res.status(200).json({ ok: true, message, claim: data, restaurant });
   } catch (e) {
     console.error('[admin claims] update handler error', { message: e.message, stack: e.stack });
-    return res.status(500).json({ ok: false, error: 'Kunde inte uppdatera ansökan' });
+    if (e.supabaseError) {
+      return res.status(e.status || 500).json({
+        ok: false,
+        ...supabaseErrorPayload(e.supabaseError)
+      });
+    }
+
+    return res.status(500).json({
+      ok: false,
+      error: e.message || 'Kunde inte uppdatera ansökan'
+    });
   }
 }
 
