@@ -85,6 +85,7 @@
         field('Hemsida', claim.website),
         field('Organisationsnummer', claim.organization_number),
         field('Meddelande', claim.message),
+        field('User ID', claim.user_id),
         field('Skapad', claim.created_at ? new Date(claim.created_at).toLocaleString('sv-SE') : ''),
         field('Adminnotering', claim.admin_note)
       ].filter(Boolean).forEach(el => grid.appendChild(el));
@@ -96,11 +97,25 @@
       note.placeholder = 'Adminnotering';
       note.value = claim.admin_note || '';
 
+      const lat = document.createElement('input');
+      lat.className = 'form-input';
+      lat.placeholder = 'Latitude';
+      lat.inputMode = 'decimal';
+
+      const lon = document.createElement('input');
+      lon.className = 'form-input';
+      lon.placeholder = 'Longitude';
+      lon.inputMode = 'decimal';
+
+      const locationHelp = document.createElement('div');
+      locationHelp.className = 'field-help admin-location-help';
+      locationHelp.textContent = 'Behövs för att restaurangen ska visas i nära dig-listan.';
+
       const approve = document.createElement('button');
       approve.className = 'btn-primary';
       approve.type = 'button';
       approve.textContent = 'Godkänn';
-      approve.addEventListener('click', () => updateClaim(claim.id, 'approved', note.value));
+      approve.addEventListener('click', () => updateClaim(claim.id, 'approved', note.value, lat.value, lon.value));
 
       const reject = document.createElement('button');
       reject.className = 'btn-secondary';
@@ -108,7 +123,11 @@
       reject.textContent = 'Avvisa';
       reject.addEventListener('click', () => updateClaim(claim.id, 'rejected', note.value));
 
-      actions.append(note, approve, reject);
+      const locationGroup = document.createElement('div');
+      locationGroup.className = 'admin-location-group';
+      locationGroup.append(lat, lon, locationHelp);
+
+      actions.append(note, locationGroup, approve, reject);
       card.append(head, grid, actions);
       claimsList.appendChild(card);
     });
@@ -127,14 +146,21 @@
     }
   }
 
-  async function updateClaim(id, status, adminNote) {
+  async function updateClaim(id, status, adminNote, lat = '', lon = '') {
     setMsg('Uppdaterar ansökan...');
     try {
-      await api('/api/admin/claims/update', {
+      const data = await api('/api/admin/claims/update', {
         method: 'POST',
-        body: JSON.stringify({ id, status, admin_note: adminNote })
+        body: JSON.stringify({
+          id,
+          status,
+          admin_note: adminNote,
+          lat: lat || null,
+          lon: lon || null
+        })
       });
       await loadClaims();
+      if (data.message) setMsg(data.message, 'success');
     } catch (e) {
       setMsg(e.message, 'error');
     }
