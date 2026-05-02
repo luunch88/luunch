@@ -426,6 +426,7 @@ function normalizeNameAddressKey(restaurant) {
 
 async function getVerifiedManualRestaurants(lat, lon, category, radiusMeters) {
   if (!supabase) return [];
+  const { today, dayIndex, currentTime } = swedenNowParts();
 
   try {
     const { data: restaurants, error } = await supabase
@@ -445,10 +446,77 @@ async function getVerifiedManualRestaurants(lat, lon, category, radiusMeters) {
       return [];
     }
 
-    const manualRestaurants = (restaurants || [])
+    const nearbyRestaurants = (restaurants || [])
       .filter(restaurant => restaurant.visible !== false)
       .map(restaurant => {
         const distance = Math.round(haversine(lat, lon, Number(restaurant.lat), Number(restaurant.lon)));
+        return { ...restaurant, distance_m: distance };
+      });
+
+    if (!nearbyRestaurants.length) {
+      console.log('Manual restaurants loaded:', 0);
+      console.log([]);
+      return [];
+    }
+
+    const restaurantIds = nearbyRestaurants.map(restaurant => restaurant.id).filter(Boolean);
+    let hours = [];
+    let menus = [];
+
+    try {
+      const [hoursData, menusResult] = await Promise.all([
+        fetchOpeningHours(restaurantIds, dayIndex),
+        supabase
+          .from('menus')
+          .select('restaurant_id, description, price')
+          .in('restaurant_id', restaurantIds)
+          .eq('date', today)
+      ]);
+
+      hours = hoursData || [];
+      if (menusResult.error) {
+        console.error('[nearby] Manual restaurant menus read failed', {
+          message: menusResult.error.message,
+          code: menusResult.error.code,
+          details: menusResult.error.details,
+          hint: menusResult.error.hint
+        });
+      } else {
+        menus = menusResult.data || [];
+      }
+    } catch (e) {
+      console.error('[nearby] Manual restaurant Luunch data crashed', {
+        message: e.message,
+        stack: e.stack
+      });
+    }
+
+    const hoursByRestaurant = new Map((hours || []).map(hour => [hour.restaurant_id, hour]));
+    const menusByRestaurant = new Map();
+    for (const dish of menus || []) {
+      const dishes = menusByRestaurant.get(dish.restaurant_id) || [];
+      dishes.push({
+        title: dish.description,
+        description: dish.description,
+        price: dish.price
+      });
+      menusByRestaurant.set(dish.restaurant_id, dishes);
+    }
+
+    const manualRestaurants = nearbyRestaurants
+      .map(restaurant => {
+        const todayHours = hoursByRestaurant.get(restaurant.id);
+        const hoursStatus = getLuunchHoursStatus(todayHours, currentTime);
+        const hasLuunchHours = Boolean(todayHours && hoursStatus.open_status !== 'unknown');
+        const dishes = menusByRestaurant.get(restaurant.id) || [];
+
+        console.log('[nearby] manual restaurant luunch data', {
+          name: restaurant.name,
+          menuItems: dishes.length,
+          openingHoursRows: todayHours ? 1 : 0,
+          open_status: hasLuunchHours ? hoursStatus.open_status : 'unknown'
+        });
+
         return {
           id: `manual/${restaurant.id}`,
           restaurant_id: restaurant.id,
@@ -464,22 +532,22 @@ async function getVerifiedManualRestaurants(lat, lon, category, radiusMeters) {
           category: restaurant.category || 'restaurant',
           type_label: restaurant.category || 'Restaurang',
           emoji: '🍽️',
-          distance_m: distance,
+          distance_m: restaurant.distance_m,
           opening_hours_raw: null,
           external_today_hours: null,
           external_is_open_now: null,
           external_open_status: 'unknown',
-          has_luunch_hours: false,
-          opening_hours_source: null,
-          today_hours: null,
-          is_open_now: null,
-          open_status: 'unknown',
+          has_luunch_hours: hasLuunchHours,
+          opening_hours_source: hasLuunchHours ? 'luunch' : null,
+          today_hours: hasLuunchHours ? hoursStatus.today_hours : null,
+          is_open_now: hasLuunchHours ? hoursStatus.is_open_now : null,
+          open_status: hasLuunchHours ? hoursStatus.open_status : 'unknown',
           claimed: true,
           verified: true,
           phone: restaurant.phone || null,
-          today_opens: null,
-          today_closes: null,
-          dishes: [],
+          today_opens: hasLuunchHours ? todayHours?.lunch_opens || todayHours?.opens || null : null,
+          today_closes: hasLuunchHours ? todayHours?.lunch_closes || todayHours?.closes || null : null,
+          dishes,
           tags: {
             name: restaurant.name,
             cuisine: restaurant.category,
