@@ -7,6 +7,8 @@ const supabase = createClient(
 );
 
 export default async function handler(req, res) {
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+
   if (!applyCors(req, res, 'GET, OPTIONS')) {
     return res.status(403).json({ error: 'Origin not allowed' });
   }
