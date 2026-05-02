@@ -9,6 +9,15 @@ function optionalNumber(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+function hasValidLocation(lat, lon) {
+  return lat !== null &&
+    lon !== null &&
+    lat >= -90 &&
+    lat <= 90 &&
+    lon >= -180 &&
+    lon <= 180;
+}
+
 function slugify(value) {
   return String(value || '')
     .toLowerCase()
@@ -43,7 +52,6 @@ async function findExistingRestaurant(supabase, claim) {
 
 async function approveRestaurantClaim(supabase, claim, lat, lon) {
   const now = new Date().toISOString();
-  const hasLocation = lat !== null && lon !== null;
   const restaurantPatch = {
     name: claim.restaurant_name,
     address: claim.address,
@@ -57,14 +65,11 @@ async function approveRestaurantClaim(supabase, claim, lat, lon) {
     claimed_by_user_id: claim.user_id || null,
     claim_email: claim.email,
     claimed_at: now,
-    visible: hasLocation,
+    lat,
+    lon,
+    visible: true,
     updated_at: now
   };
-
-  if (hasLocation) {
-    restaurantPatch.lat = lat;
-    restaurantPatch.lon = lon;
-  }
 
   const existing = await findExistingRestaurant(supabase, claim);
   if (existing) {
@@ -95,8 +100,6 @@ async function approveRestaurantClaim(supabase, claim, lat, lon) {
     source_id: sourceId,
     osm_id: sourceId,
     slug: slugify(`${claim.restaurant_name}-${claim.city || ''}`),
-    lat: hasLocation ? lat : null,
-    lon: hasLocation ? lon : null,
     created_at: now
   };
 
@@ -155,6 +158,13 @@ export default async function handler(req, res) {
     let message = 'Ansökan uppdaterad';
 
     if (status === 'approved') {
+      if (!hasValidLocation(lat, lon)) {
+        return res.status(400).json({
+          ok: false,
+          error: 'Latitude och longitude krävs för att godkänna restaurangen'
+        });
+      }
+
       const { data: claim, error: claimError } = await supabase
         .from('claims')
         .select('id, user_id, restaurant_name, address, postal_code, city, restaurant_type, email, status')
@@ -171,10 +181,15 @@ export default async function handler(req, res) {
         return res.status(404).json({ ok: false, error: 'Ansökan hittades inte' });
       }
 
+      if (!claim.user_id) {
+        return res.status(400).json({
+          ok: false,
+          error: 'Ansökan saknar user_id. Be användaren skicka ansökan igen.'
+        });
+      }
+
       restaurant = await approveRestaurantClaim(supabase, claim, lat, lon);
-      message = restaurant.visible
-        ? 'Restaurang godkänd och kopplad'
-        : 'Restaurangen är godkänd men visas inte förrän plats är angiven.';
+      message = 'Restaurang skapad och kopplad';
     }
 
     const update = {
@@ -208,3 +223,4 @@ export default async function handler(req, res) {
     return res.status(500).json({ ok: false, error: 'Kunde inte uppdatera ansökan' });
   }
 }
+
