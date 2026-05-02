@@ -91,6 +91,34 @@ async function assertClaimsSchema() {
   return null;
 }
 
+async function insertClaim(payload) {
+  const { error } = await supabase
+    .from('claims')
+    .insert(payload);
+
+  if (!error) return null;
+
+  const isMissingUserId = error.code === 'PGRST204' &&
+    String(error.message || '').includes("'user_id'");
+
+  if (!isMissingUserId) return error;
+
+  const fallbackPayload = { ...payload };
+  delete fallbackPayload.user_id;
+
+  console.error('[claim] claims.user_id saknas. Retrying insert without user_id.', {
+    message: error.message,
+    code: error.code,
+    hint: error.hint
+  });
+
+  const retry = await supabase
+    .from('claims')
+    .insert(fallbackPayload);
+
+  return retry.error || null;
+}
+
 export default async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
@@ -170,9 +198,7 @@ export default async function handler(req, res) {
       });
     }
 
-    const { error } = await supabase
-      .from('claims')
-      .insert(payload);
+    const error = await insertClaim(payload);
 
     if (error) {
       console.error('[claim] Supabase insert failed', {
