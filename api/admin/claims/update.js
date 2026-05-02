@@ -49,6 +49,52 @@ function throwSupabaseError(label, error, meta = {}) {
   throw wrapped;
 }
 
+function getMissingSchemaColumn(error) {
+  const text = [error?.message, error?.details, error?.hint].filter(Boolean).join(' ');
+  return text.match(/'([^']+)' column/)?.[1] || null;
+}
+
+async function writeRestaurantWithSchemaFallback(supabase, mode, payload, existingId = null) {
+  let nextPayload = { ...payload };
+  const strippedColumns = [];
+
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const query = mode === 'update'
+      ? supabase.from('restaurants').update(nextPayload).eq('id', existingId)
+      : supabase.from('restaurants').insert(nextPayload);
+    const { data, error } = await query.select('id, name').single();
+
+    if (!error) {
+      if (strippedColumns.length) {
+        console.warn('[admin claims] restaurant write succeeded after stripping missing schema columns', {
+          mode,
+          strippedColumns
+        });
+      }
+      return data;
+    }
+
+    const missingColumn = getMissingSchemaColumn(error);
+    if (error.code !== 'PGRST204' || !missingColumn || !(missingColumn in nextPayload)) {
+      throwSupabaseError(`[admin claims] restaurant approve ${mode} failed`, error, {
+        existingId,
+        payload: nextPayload,
+        strippedColumns
+      });
+    }
+
+    strippedColumns.push(missingColumn);
+    delete nextPayload[missingColumn];
+    console.warn('[admin claims] retrying restaurant write without missing schema column', {
+      mode,
+      missingColumn,
+      strippedColumns
+    });
+  }
+
+  throw new Error('Kunde inte skriva restaurang efter schema-fallback.');
+}
+
 async function findExistingRestaurant(supabase, claim) {
   const { data, error } = await supabase
     .from('restaurants')
@@ -90,22 +136,7 @@ async function approveRestaurantClaim(supabase, claim, lat, lon) {
 
   const existing = await findExistingRestaurant(supabase, claim);
   if (existing) {
-    const { data, error } = await supabase
-      .from('restaurants')
-      .update(restaurantPatch)
-      .eq('id', existing.id)
-      .select('id, name, visible')
-      .single();
-
-    if (error) {
-      throwSupabaseError('[admin claims] restaurant approve update failed', error, {
-        claim_id: claim.id,
-        restaurant_id: existing.id,
-        restaurantPatch
-      });
-    }
-
-    return data;
+    return writeRestaurantWithSchemaFallback(supabase, 'update', restaurantPatch, existing.id);
   }
 
   const sourceId = `manual/${claim.id}`;
@@ -117,20 +148,7 @@ async function approveRestaurantClaim(supabase, claim, lat, lon) {
     created_at: now
   };
 
-  const { data, error } = await supabase
-    .from('restaurants')
-    .insert(insertPayload)
-    .select('id, name, visible')
-    .single();
-
-  if (error) {
-    throwSupabaseError('[admin claims] restaurant approve insert failed', error, {
-      claim_id: claim.id,
-      insertPayload
-    });
-  }
-
-  return data;
+  return writeRestaurantWithSchemaFallback(supabase, 'insert', insertPayload);
 }
 
 export default async function handler(req, res) {
