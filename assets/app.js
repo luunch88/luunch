@@ -59,6 +59,10 @@ function statusBadgeText(openStatus, hasOwnHours) {
   return '⏰ Öppettider saknas';
 }
 
+function restaurantRouteId(place) {
+  return place.restaurant_id ? `manual/${place.restaurant_id}` : place.id || place.osm_id || '';
+}
+
 function buildCard(place) {
   const osmId = place.id || place.osm_id || '';
   const name = place.name || 'Okänt ställe';
@@ -81,6 +85,9 @@ function buildCard(place) {
 
   const card = document.createElement('div');
   card.className = verified ? 'card card-verified' : 'card card-unverified';
+  card.tabIndex = 0;
+  card.setAttribute('role', 'button');
+  card.setAttribute('aria-label', `Visa ${name}`);
 
   const top = createEl('div', 'card-top');
   top.appendChild(createEl('div', 'card-emoji-box', emoji));
@@ -161,6 +168,7 @@ function buildCard(place) {
   mapsLink.href = mapsUrl;
   mapsLink.target = '_blank';
   mapsLink.rel = 'noopener';
+  mapsLink.addEventListener('click', event => event.stopPropagation());
   actions.appendChild(mapsLink);
   footer.appendChild(actions);
   body.appendChild(footer);
@@ -171,8 +179,187 @@ function buildCard(place) {
     event.stopPropagation();
     toggleFavorite(osmId, name, address, emoji);
   });
+  card.addEventListener('click', () => openRestaurantDetail(place));
+  card.addEventListener('keydown', event => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openRestaurantDetail(place);
+    }
+  });
 
   return card;
+}
+
+function dayLabel(dayIndex) {
+  return ['Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör', 'Sön'][dayIndex] || '';
+}
+
+function restaurantMapsUrl(place) {
+  const lat = Number(place.lat);
+  const lon = Number(place.lon);
+  if (Number.isFinite(lat) && Number.isFinite(lon)) {
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lat},${lon}`)}`;
+  }
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([place.name, place.address, place.city].filter(Boolean).join(' '))}`;
+}
+
+function findRestaurantByRouteId(routeId) {
+  return allRestaurants.find(place => restaurantRouteId(place) === routeId || place.id === routeId || place.osm_id === routeId);
+}
+
+function setRestaurantRoute(routeId) {
+  const url = new URL(window.location.href);
+  url.searchParams.set('restaurant', routeId);
+  window.history.pushState({ restaurant: routeId }, '', url);
+}
+
+function clearRestaurantRoute() {
+  const url = new URL(window.location.href);
+  url.searchParams.delete('restaurant');
+  window.history.pushState({}, '', url);
+}
+
+function closeRestaurantDetail({ updateRoute = true } = {}) {
+  const overlay = document.querySelector('.detail-overlay');
+  overlay?.remove();
+  document.body.classList.remove('detail-open');
+  if (updateRoute && new URLSearchParams(window.location.search).has('restaurant')) clearRestaurantRoute();
+}
+
+function renderDetailSection(title, children) {
+  const section = createEl('section', 'detail-section');
+  section.appendChild(createEl('h3', 'detail-section-title', title));
+  children.forEach(child => section.appendChild(child));
+  return section;
+}
+
+function renderRestaurantDetail(place) {
+  document.querySelector('.detail-overlay')?.remove();
+
+  const verified = place.claimed === true || place.verified === true;
+  const dishes = Array.isArray(place.dishes) ? place.dishes : [];
+  const hasOwnHours = verified && place.has_luunch_hours === true;
+  const todayHours = hasOwnHours
+    ? place.today_hours || (place.today_opens && place.today_closes ? `${place.today_opens}-${place.today_closes}` : null)
+    : null;
+  const distance = Number.isFinite(place.distance_m) ? place.distance_m : null;
+  const osmId = place.id || place.osm_id || restaurantRouteId(place);
+
+  const overlay = createEl('div', 'detail-overlay');
+  const panel = createEl('article', 'detail-panel');
+
+  const top = createEl('div', 'detail-top');
+  const back = createEl('button', 'detail-back', '← Tillbaka');
+  back.type = 'button';
+  back.addEventListener('click', () => closeRestaurantDetail());
+  top.appendChild(back);
+
+  const hero = createEl('div', 'detail-hero');
+  const titleWrap = createEl('div', 'detail-title-wrap');
+  titleWrap.appendChild(createEl('div', 'detail-kicker', verified ? 'Verifierad restaurang' : 'Restaurang'));
+  titleWrap.appendChild(createEl('h2', 'detail-title', place.name || 'Okänt ställe'));
+
+  const meta = createEl('div', 'detail-meta');
+  if (distance !== null) meta.appendChild(createEl('span', 'detail-pill detail-distance', distLabel(distance)));
+  meta.appendChild(createEl('span', 'detail-pill', place.type_label || place.category || 'Restaurang'));
+  if (verified) meta.appendChild(createEl('span', 'detail-pill detail-verified', '✓ Verifierad'));
+  meta.appendChild(createEl('span', 'detail-pill', statusBadgeText(place.open_status || 'unknown', hasOwnHours)));
+  titleWrap.appendChild(meta);
+  hero.appendChild(titleWrap);
+  top.appendChild(hero);
+  panel.appendChild(top);
+
+  const content = createEl('div', 'detail-content');
+
+  if (dishes.length > 0) {
+    const rows = dishes.map(dish => {
+      const row = createEl('div', 'detail-menu-row');
+      row.appendChild(createEl('div', 'detail-menu-name', dish.description || dish.title || 'Dagens lunch'));
+      if (dish.price) row.appendChild(createEl('div', 'detail-menu-price', `${dish.price} kr`));
+      return row;
+    });
+    content.appendChild(renderDetailSection('Dagens meny', rows));
+  } else {
+    content.appendChild(renderDetailSection('Dagens meny', [
+      createEl('p', 'detail-muted', verified ? 'Ingen meny tillagd idag.' : 'Ingen bekräftad meny.')
+    ]));
+  }
+
+  const hourRows = [createEl('div', 'detail-hours-today', todayHours ? `Idag ${todayHours}` : 'Öppettider saknas')];
+  if (Array.isArray(place.week_hours) && place.week_hours.length > 0) {
+    const week = createEl('div', 'detail-week-hours');
+    place.week_hours.forEach(row => {
+      const line = createEl('div', 'detail-week-row');
+      line.appendChild(createEl('span', '', dayLabel(row.day_of_week)));
+      line.appendChild(createEl('span', '', row.opens && row.closes ? `${row.lunch_opens || row.opens}-${row.lunch_closes || row.closes}` : 'Stängt'));
+      week.appendChild(line);
+    });
+    hourRows.push(week);
+  }
+  content.appendChild(renderDetailSection('Öppettider', hourRows));
+
+  const infoRows = [];
+  if (place.address) infoRows.push(createEl('div', 'detail-info-row', place.address));
+  if (place.city || place.postal_code) infoRows.push(createEl('div', 'detail-info-row', [place.postal_code, place.city].filter(Boolean).join(' ')));
+  content.appendChild(renderDetailSection('Adress', infoRows.length ? infoRows : [createEl('p', 'detail-muted', 'Adress saknas')]));
+
+  const actions = createEl('div', 'detail-actions');
+  const favButton = createEl('button', 'detail-fav' + (isFavorite(osmId) ? ' saved' : ''), isFavorite(osmId) ? '❤️ Sparad' : '♡ Spara');
+  favButton.type = 'button';
+  favButton.addEventListener('click', () => {
+    toggleFavorite(osmId, place.name || 'Restaurang', place.address || '', place.emoji || '🍽️');
+    const saved = isFavorite(osmId);
+    favButton.classList.toggle('saved', saved);
+    favButton.textContent = saved ? '❤️ Sparad' : '♡ Spara';
+  });
+  const maps = createEl('a', 'detail-maps', 'Vägbeskrivning →');
+  maps.href = restaurantMapsUrl(place);
+  maps.target = '_blank';
+  maps.rel = 'noopener';
+  actions.append(favButton, maps);
+  content.appendChild(actions);
+
+  panel.appendChild(content);
+  overlay.appendChild(panel);
+  overlay.addEventListener('click', event => {
+    if (event.target === overlay) closeRestaurantDetail();
+  });
+  document.body.appendChild(overlay);
+  document.body.classList.add('detail-open');
+}
+
+async function openRestaurantDetail(place, { updateRoute = true } = {}) {
+  // TODO: make restaurant detail pages indexable SEO pages when real routes are added.
+  const routeId = restaurantRouteId(place);
+  renderRestaurantDetail(place);
+  if (updateRoute && routeId) setRestaurantRoute(routeId);
+
+  if (routeId && window.LuunchAPI.getRestaurant) {
+    try {
+      const fresh = await window.LuunchAPI.getRestaurant(routeId);
+      renderRestaurantDetail({ ...place, ...fresh, distance_m: place.distance_m });
+    } catch (e) {
+      console.warn('[detail] kunde inte hämta extra restaurangdata', e.message);
+    }
+  }
+}
+
+async function openRestaurantFromRoute() {
+  const routeId = new URLSearchParams(window.location.search).get('restaurant');
+  if (!routeId) return;
+
+  const existing = findRestaurantByRouteId(routeId);
+  if (existing) {
+    await openRestaurantDetail(existing, { updateRoute: false });
+    return;
+  }
+
+  try {
+    const restaurant = await window.LuunchAPI.getRestaurant(routeId);
+    renderRestaurantDetail(restaurant);
+  } catch (e) {
+    showError('Kunde inte hämta restaurangen.');
+  }
 }
 
 function renderEmpty(container, title, text, emoji = '😔') {
@@ -239,6 +426,7 @@ function renderFindStartState() {
 }
 
 function showFind() {
+  closeRestaurantDetail();
   setActiveNav('find');
   setFindControlsVisible(true);
   if (allRestaurants.length > 0) {
@@ -322,6 +510,7 @@ function toggleFavorite(osmId, name, address, emoji) {
 }
 
 function showSaved() {
+  closeRestaurantDetail();
   setActiveNav('saved');
   setFindControlsVisible(false);
   hideNotice();
@@ -373,6 +562,7 @@ function removeFav(osmId, card) {
 }
 
 function showDeals() {
+  closeRestaurantDetail();
   setActiveNav('deals');
   setFindControlsVisible(false);
   hideNotice();
@@ -470,5 +660,15 @@ async function locate() {
   }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 120000 });
 }
 
+window.addEventListener('popstate', () => {
+  const routeId = new URLSearchParams(window.location.search).get('restaurant');
+  if (routeId) {
+    openRestaurantFromRoute();
+  } else {
+    closeRestaurantDetail({ updateRoute: false });
+  }
+});
+
 updateClock();
 setInterval(updateClock, 30000);
+openRestaurantFromRoute();
