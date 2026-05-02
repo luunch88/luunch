@@ -14,6 +14,7 @@ alter table public.restaurants
   add column if not exists claimed boolean default false,
   add column if not exists verified boolean default false,
   add column if not exists claimed_by_user_id uuid,
+  add column if not exists email text,
   add column if not exists claim_email text,
   add column if not exists claimed_at timestamptz,
   add column if not exists lat double precision,
