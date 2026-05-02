@@ -635,9 +635,11 @@ export default async function handler(req, res) {
     const rawLon = req.query?.lon;
     const rawCategory = req.query?.category;
     const rawRadius = req.query?.radius;
+    const rawForce = req.query?.force;
     const lat = Number(rawLat);
     const lon = Number(rawLon);
     const category = String(rawCategory || 'alla').toLowerCase();
+    const forceRefresh = rawForce === '1' || rawForce === 'true';
     const radiusMeters = Number.isFinite(Number(rawRadius)) && Number(rawRadius) > 0
       ? Math.min(Number(rawRadius), 3000)
       : DEFAULT_RADIUS_METERS;
@@ -662,24 +664,39 @@ export default async function handler(req, res) {
     const cacheKey = cacheKeyFor(grid, category, radiusMeters);
     const memoryHit = memoryCache.get(cacheKey);
 
-    if (isFreshSnapshot(memoryHit)) {
+    if (forceRefresh) {
+      console.log('CACHE BYPASSED');
+    }
+
+    if (!forceRefresh && isFreshSnapshot(memoryHit)) {
       const payload = await mergeManualRestaurantsIntoPayload(memoryHit.payload, lat, lon, category, radiusMeters);
+      console.log('[nearby] source=cache', { cacheKey, grid, category, radiusMeters, cache: 'memory' });
       return res.status(200).json({ ok: true, ...payload, source: 'cache' });
     }
 
-    const dbHit = await readDbSnapshot(cacheKey);
-    if (isFreshSnapshot(dbHit)) {
+    const dbHit = forceRefresh ? null : await readDbSnapshot(cacheKey);
+    if (!forceRefresh && isFreshSnapshot(dbHit)) {
       memoryCache.set(cacheKey, dbHit);
       const payload = await mergeManualRestaurantsIntoPayload(dbHit.payload, lat, lon, category, radiusMeters);
+      console.log('[nearby] source=cache', { cacheKey, grid, category, radiusMeters, cache: 'db' });
       return res.status(200).json({ ok: true, ...payload, source: 'cache' });
     }
 
     try {
       const payload = await buildPayload(lat, lon, category, radiusMeters);
-      const snapshot = { payload, expiresAt: Date.now() + TTL_MS };
+      const responsePayload = forceRefresh
+        ? { ...payload, source: 'fresh-forced' }
+        : payload;
+      const snapshot = { payload: responsePayload, expiresAt: Date.now() + TTL_MS };
       memoryCache.set(cacheKey, snapshot);
-      await writeDbSnapshot(cacheKey, grid, category, payload);
-      return res.status(200).json({ ok: true, ...payload, source: 'fresh' });
+      await writeDbSnapshot(cacheKey, grid, category, responsePayload);
+      console.log(forceRefresh ? '[nearby] source=forced' : '[nearby] source=fresh', {
+        cacheKey,
+        grid,
+        category,
+        radiusMeters
+      });
+      return res.status(200).json({ ok: true, ...responsePayload, source: forceRefresh ? 'fresh-forced' : 'fresh' });
     } catch (e) {
       console.error('[nearby] Fresh fetch failed', {
         message: e.message,
@@ -690,9 +707,10 @@ export default async function handler(req, res) {
         radiusMeters
       });
 
-      const staleHit = memoryHit || dbHit;
+      const staleHit = forceRefresh ? null : (memoryHit || dbHit);
       if (staleHit?.payload?.restaurants) {
         const payload = await mergeManualRestaurantsIntoPayload(staleHit.payload, lat, lon, category, radiusMeters);
+        console.log('[nearby] source=stale-cache', { cacheKey, grid, category, radiusMeters });
         return res.status(200).json({
           ok: true,
           ...payload,
