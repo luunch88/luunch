@@ -96,7 +96,10 @@ async function submitClaimRequest(claimPayload) {
       data
     });
     if (!res.ok || data.ok === false) {
-      throw new Error('Kunde inte skicka ansökan just nu. Försök igen.');
+      console.error('[claim] failed response', data);
+      const error = new Error(data.error || 'Server error');
+      error.response = data;
+      throw error;
     }
     return data.claim || null;
   } finally {
@@ -511,7 +514,7 @@ async function applyRestaurant() {
     showMsg('applyMsg', 'Tack! Din ansökan är skickad. Vi granskar den manuellt.', 'success');
     await showPendingClaim(claimPayload);
   } catch (e) {
-    showMsg('applyMsg', 'Kunde inte skicka ansökan just nu. Försök igen.', 'error');
+    showMsg('applyMsg', `Kunde inte skicka ansökan: ${e.message}`, 'error');
   }
 
   btn.disabled = false;
