@@ -5,7 +5,7 @@ const TTL_MS = 6 * 60 * 60 * 1000;
 const GRID_SIZE = 0.005;
 const DEFAULT_RADIUS_METERS = 800;
 const MAX_RESULTS = 30;
-const CACHE_VERSION = 4;
+const CACHE_VERSION = 5;
 const OVERPASS_TIMEOUT_MS = 8000;
 const OVERPASS_ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
@@ -17,7 +17,7 @@ globalThis.__luunchNearbyCache = memoryCache;
 
 let supabase = null;
 try {
-  const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY;
   supabase = process.env.SUPABASE_URL && supabaseKey
     ? createClient(process.env.SUPABASE_URL, supabaseKey)
     : null;
@@ -26,6 +26,7 @@ try {
     message: e.message,
     stack: e.stack,
     hasSupabaseUrl: Boolean(process.env.SUPABASE_URL),
+    hasSupabaseServiceRoleKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
     hasSupabaseServiceKey: Boolean(process.env.SUPABASE_SERVICE_KEY),
     hasSupabaseAnonKey: Boolean(process.env.SUPABASE_ANON_KEY)
   });
@@ -34,6 +35,7 @@ try {
 if (!supabase) {
   console.warn('[nearby] Supabase env saknas eller kunde inte initieras. Kör med in-memory cache fallback.', {
     hasSupabaseUrl: Boolean(process.env.SUPABASE_URL),
+    hasSupabaseServiceRoleKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
     hasSupabaseServiceKey: Boolean(process.env.SUPABASE_SERVICE_KEY),
     hasSupabaseAnonKey: Boolean(process.env.SUPABASE_ANON_KEY)
   });
@@ -415,9 +417,8 @@ async function getVerifiedManualRestaurants(lat, lon, category, radiusMeters) {
   try {
     const { data: restaurants, error } = await supabase
       .from('restaurants')
-      .select('id, osm_id, source, source_id, name, phone, address, postal_code, city, category, type, lat, lon, visible, verified, claimed, claimed_by_user_id')
+      .select('id, osm_id, source, source_id, name, phone, address, postal_code, city, category, type, lat, lon, verified, claimed, claimed_by_user_id')
       .eq('verified', true)
-      .eq('visible', true)
       .not('lat', 'is', null)
       .not('lon', 'is', null);
 
@@ -530,6 +531,32 @@ function mergeVerifiedRestaurants(externalRestaurants, manualRestaurants) {
   return merged;
 }
 
+function sortRestaurants(a, b) {
+  const aClaimed = Boolean(a.claimed || a.verified || a.priority === 0);
+  const bClaimed = Boolean(b.claimed || b.verified || b.priority === 0);
+
+  if (aClaimed !== bClaimed) {
+    return Number(bClaimed) - Number(aClaimed);
+  }
+
+  return a.distance_m - b.distance_m;
+}
+
+async function mergeManualRestaurantsIntoPayload(payload, lat, lon, category, radiusMeters) {
+  const cachedExternalRestaurants = (payload.restaurants || [])
+    .filter(restaurant => restaurant.source !== 'manual')
+    .filter(restaurant => restaurant.distance_m <= radiusMeters)
+    .filter(restaurant => matchesCategory(restaurant, category));
+  const manualRestaurants = await getVerifiedManualRestaurants(lat, lon, category, radiusMeters);
+
+  return {
+    ...payload,
+    restaurants: mergeVerifiedRestaurants(cachedExternalRestaurants, manualRestaurants)
+      .sort(sortRestaurants)
+      .slice(0, MAX_RESULTS)
+  };
+}
+
 async function buildPayload(lat, lon, category, radiusMeters) {
   const elements = await fetchOverpass(lat, lon);
   const { currentTime } = swedenNowParts();
@@ -578,7 +605,7 @@ async function buildPayload(lat, lon, category, radiusMeters) {
     .filter(restaurant => matchesCategory(restaurant, category));
   const manualRestaurants = await getVerifiedManualRestaurants(lat, lon, category, radiusMeters);
   const restaurants = mergeVerifiedRestaurants(externalRestaurants, manualRestaurants)
-    .sort((a, b) => (a.priority ?? 1) - (b.priority ?? 1) || a.distance_m - b.distance_m)
+    .sort(sortRestaurants)
     .slice(0, MAX_RESULTS);
 
   return {
@@ -636,13 +663,15 @@ export default async function handler(req, res) {
     const memoryHit = memoryCache.get(cacheKey);
 
     if (isFreshSnapshot(memoryHit)) {
-      return res.status(200).json({ ok: true, ...memoryHit.payload, source: 'cache' });
+      const payload = await mergeManualRestaurantsIntoPayload(memoryHit.payload, lat, lon, category, radiusMeters);
+      return res.status(200).json({ ok: true, ...payload, source: 'cache' });
     }
 
     const dbHit = await readDbSnapshot(cacheKey);
     if (isFreshSnapshot(dbHit)) {
       memoryCache.set(cacheKey, dbHit);
-      return res.status(200).json({ ok: true, ...dbHit.payload, source: 'cache' });
+      const payload = await mergeManualRestaurantsIntoPayload(dbHit.payload, lat, lon, category, radiusMeters);
+      return res.status(200).json({ ok: true, ...payload, source: 'cache' });
     }
 
     try {
@@ -663,9 +692,10 @@ export default async function handler(req, res) {
 
       const staleHit = memoryHit || dbHit;
       if (staleHit?.payload?.restaurants) {
+        const payload = await mergeManualRestaurantsIntoPayload(staleHit.payload, lat, lon, category, radiusMeters);
         return res.status(200).json({
           ok: true,
-          ...staleHit.payload,
+          ...payload,
           source: 'stale-cache',
           warning: 'Fresh data failed, showing cached results'
         });
@@ -683,6 +713,8 @@ export default async function handler(req, res) {
       query: req.query,
       method: req.method,
       hasSupabaseUrl: Boolean(process.env.SUPABASE_URL),
+      hasSupabaseServiceRoleKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+      hasSupabaseServiceKey: Boolean(process.env.SUPABASE_SERVICE_KEY),
       hasSupabaseAnonKey: Boolean(process.env.SUPABASE_ANON_KEY)
     });
 
