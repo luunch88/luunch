@@ -1,10 +1,15 @@
 (function () {
-  async function getNearby({ lat, lon, category = 'alla' }) {
+  function shouldForceNearby() {
+    return new URLSearchParams(window.location.search).get('force') === '1';
+  }
+
+  async function getNearby({ lat, lon, category = 'alla', force = shouldForceNearby() }) {
     const params = new URLSearchParams({
       lat: String(lat),
       lon: String(lon),
       category
     });
+    if (force) params.set('force', '1');
     const res = await fetch(`/api/nearby?${params.toString()}`);
     const data = await res.json();
     if (data?.source) console.log('Nearby source:', data.source, data.cached_at);
