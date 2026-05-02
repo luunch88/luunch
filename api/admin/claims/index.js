@@ -26,7 +26,7 @@ export default async function handler(req, res) {
     const status = String(req.query?.status || 'all');
     let query = supabase
       .from('claims')
-      .select('id, restaurant_name, address, postal_code, city, restaurant_type, contact_person, email, phone, website, organization_number, message, status, created_at, reviewed_at, reviewed_by, admin_note')
+      .select('id, user_id, restaurant_name, address, postal_code, city, restaurant_type, contact_person, email, phone, website, organization_number, message, status, created_at, reviewed_at, reviewed_by, admin_note')
       .order('created_at', { ascending: false });
 
     if (VALID_STATUSES.has(status)) {
