@@ -15,7 +15,7 @@ export function applyCors(req, res, methods) {
   const origin = req.headers.origin;
   res.setHeader('Vary', 'Origin');
   res.setHeader('Access-Control-Allow-Methods', methods);
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-admin-secret');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-admin-secret');
 
   if (!origin) return true;
   if (!ALLOWED_ORIGINS.has(origin)) return false;
