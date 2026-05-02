@@ -26,9 +26,22 @@
         ...(options.headers || {})
       }
     });
-    const data = await res.json();
+    let data;
+    try {
+      data = await res.json();
+    } catch (e) {
+      data = { ok: false, error: 'API:t returnerade inte JSON.' };
+    }
+    const result = {
+      status: res.status,
+      ok: res.ok && data.ok !== false,
+      data
+    };
+
     if (!res.ok || data.ok === false) {
-      throw new Error(data.error || 'Adminanropet misslyckades.');
+      const error = new Error(data.error || 'Adminanropet misslyckades.');
+      error.result = result;
+      throw error;
     }
     return data;
   }
@@ -165,13 +178,17 @@
           status,
           admin_note: adminNote,
           lat: lat || null,
-          lon: lon || null
+          lon: lon || null,
+          latitude: lat || null,
+          longitude: lon || null
         })
       });
       await loadClaims();
       setMsg(status === 'approved' ? 'Restaurang godkänd' : (data.message || 'Ansökan uppdaterad'), 'success');
     } catch (e) {
-      setMsg(e.message, 'error');
+      console.error('[admin update] failed:', e.result || e);
+      const apiError = e.result?.data?.error || e.message;
+      setMsg(`Kunde inte uppdatera ansökan: ${apiError}`, 'error');
     }
   }
 
