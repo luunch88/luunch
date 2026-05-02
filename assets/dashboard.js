@@ -73,10 +73,12 @@ async function submitClaimRequest(claimPayload) {
   if (claimInProgress) return null;
   claimInProgress = true;
   try {
+    const { data: { session } } = await sb.auth.getSession();
     const res = await fetch('/api/claim', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {})
       },
       body: JSON.stringify(claimPayload)
     });
@@ -321,7 +323,12 @@ async function fetchOwnedRestaurant(userId) {
 
 async function loadDashboard(user) {
   currentUser = user;
-  const restaurant = await fetchOwnedRestaurant(user.id);
+  let restaurant = null;
+  try {
+    restaurant = await fetchOwnedRestaurant(user.id);
+  } catch (e) {
+    console.warn('[dashboard] owned restaurant lookup crashed; showing apply view', e);
+  }
 
   if (!restaurant) {
     prepareApplyForm();
@@ -477,6 +484,7 @@ async function applyRestaurant() {
   const name = valueOf('applyName');
   const btn = document.getElementById('applyBtn');
   const claimPayload = {
+    user_id: currentUser.id,
     restaurant_name: name,
     address: valueOf('applyAddress'),
     postal_code: valueOf('applyPostalCode'),
