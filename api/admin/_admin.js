@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 export function getSupabaseAdmin() {
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!process.env.SUPABASE_URL || !key) return null;
   return createClient(process.env.SUPABASE_URL, key);
 }
@@ -24,3 +24,4 @@ export function requireAdminSecret(req) {
 export function cleanText(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
+
