@@ -74,13 +74,13 @@ function buildCard(place) {
     ? place.today_hours || (place.today_opens && place.today_closes ? `${place.today_opens}-${place.today_closes}` : null)
     : null;
   const openStatus = hasOwnHours ? place.open_status || 'unknown' : 'unknown';
-  const claimed = !!place.claimed;
+  const verified = place.claimed === true || place.verified === true;
   const mapsUrl = Number.isFinite(lat) && Number.isFinite(lon)
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lat},${lon}`)}`
     : '#';
 
   const card = document.createElement('div');
-  card.className = 'card';
+  card.className = verified ? 'card card-verified' : 'card card-unverified';
 
   const top = createEl('div', 'card-top');
   top.appendChild(createEl('div', 'card-emoji-box', emoji));
@@ -103,7 +103,11 @@ function buildCard(place) {
     : 'badge badge-status badge-unknown';
   badges.appendChild(createEl('span', statusClass, statusBadgeText(openStatus, hasOwnHours)));
   badges.appendChild(createEl('span', 'badge badge-type', typeLabel));
-  if (claimed) badges.appendChild(createEl('span', 'badge badge-claimed', '✓ Verifierad'));
+  if (verified) {
+    badges.appendChild(createEl('span', 'badge badge-claimed', '✓ Verifierad'));
+  } else {
+    badges.appendChild(createEl('span', 'badge badge-unconfirmed', 'Info ej bekräftad'));
+  }
 
   topInfo.appendChild(badges);
   top.appendChild(topInfo);
@@ -113,20 +117,30 @@ function buildCard(place) {
 
   if (dishes.length > 0) {
     const menu = createEl('div', 'card-menu');
-    menu.appendChild(createEl('div', 'card-menu-label', 'Dagens lunch'));
+    const menuHead = createEl('div', 'card-menu-head');
+    menuHead.appendChild(createEl('div', 'card-menu-label', 'DAGENS LUNCH'));
+    if (verified) menuHead.appendChild(createEl('div', 'card-menu-fresh', 'Uppdaterad idag'));
+    menu.appendChild(menuHead);
+
     dishes.forEach(dish => {
-      const item = createEl('div', 'card-menu-text');
-      const price = dish.price ? ` — ${dish.price} kr` : '';
-      item.textContent = `• ${dish.description || ''}${price}`;
+      const item = createEl('div', 'card-menu-item');
+      const text = createEl('div', 'card-menu-text');
+      text.textContent = dish.description || dish.title || '';
+      item.appendChild(text);
+      if (dish.price) {
+        const price = createEl('div', 'card-menu-price');
+        price.textContent = `${dish.price} kr`;
+        item.appendChild(price);
+      }
       menu.appendChild(item);
     });
     body.appendChild(menu);
   } else {
-    body.appendChild(createEl('div', 'card-missing', '🍽️ Ingen meny tillagd'));
+    body.appendChild(createEl('div', 'card-missing', verified ? 'Ingen meny tillagd' : 'Ingen bekräftad meny'));
   }
 
   if (todayHours) {
-    body.appendChild(createEl('div', 'card-today-hours', `🕐 ${todayHours}`));
+    body.appendChild(createEl('div', 'card-today-hours', `Idag ${todayHours}`));
   }
 
   const footer = createEl('div', 'card-footer');
