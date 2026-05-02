@@ -1,11 +1,11 @@
-// â”€â”€ Supabase init â”€â”€
-// Dessa vÃ¤rden Ã¤r publika (anon key) â€” sÃ¤kert att ha i frontend
+// -- Supabase init --
+// Dessa värden är publika (anon key) — säkert att ha i frontend
 const SUPABASE_URL = 'https://thibluvsuufpgxkcqewb.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRoaWJsdXZzdXVmcGd4a2NxZXdiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQwNDE4NjYsImV4cCI6MjA4OTYxNzg2Nn0.gHkkBI-2ZnaNbPNSsP4GHZkKK7uc5Q9wbuG948oaQe0'; // Byt ut mot din anon key
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const { escapeHtml, escapeAttr } = window.LuunchUI;
 
-const days = ['MÃ¥ndag','Tisdag','Onsdag','Torsdag','Fredag','LÃ¶rdag','SÃ¶ndag'];
+const days = ['Måndag','Tisdag','Onsdag','Torsdag','Fredag','Lördag','Söndag'];
 let currentRestaurant = null;
 let claimInProgress = false;
 let currentUser = null;
@@ -18,7 +18,7 @@ const RESTAURANT_TYPES = new Set([
   'Thai',
   'Indiskt',
   'Vegetariskt',
-  'CafÃ©',
+  'Café',
   'Annat'
 ]);
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -30,7 +30,7 @@ function setupAuthView() {
   if (mode === 'signup') showRegister();
 }
 
-// â”€â”€ Build hours grid â”€â”€
+// -- Build hours grid --
 function buildHoursGrid(existing = []) {
   const grid = document.getElementById('hoursGrid');
   grid.innerHTML = '';
@@ -43,7 +43,7 @@ function buildHoursGrid(existing = []) {
       <span class="hours-day">${day.slice(0,3)}</span>
       <button class="hours-toggle ${isOn?'on':''}" id="toggle_${i}" onclick="toggleDay(${i})" type="button"></button>
       <input class="hours-input" id="opens_${i}" type="time" value="${escapeAttr(ex?.opens || '11:00')}" ${isOn?'':'disabled'} style="opacity:${isOn?1:0.3}">
-      <span class="hours-sep">â€“</span>
+      <span class="hours-sep">–</span>
       <input class="hours-input" id="closes_${i}" type="time" value="${escapeAttr(ex?.closes || '14:00')}" ${isOn?'':'disabled'} style="opacity:${isOn?1:0.3}">
     `;
     grid.appendChild(row);
@@ -59,7 +59,7 @@ function toggleDay(i) {
   closes.disabled = !isOn; closes.style.opacity = isOn ? 1 : 0.3;
 }
 
-// â”€â”€ Toggle forms â”€â”€
+// -- Toggle forms --
 function showRegister() {
   document.getElementById('formLogin').style.display = 'none';
   document.getElementById('formRegister').style.display = 'block';
@@ -161,7 +161,7 @@ function validateApplyPayload(payload) {
     isValid = false;
   }
   if (!RESTAURANT_TYPES.has(payload.restaurant_type)) {
-    setFieldError('applyType', 'VÃ¤lj typ av restaurang.');
+    setFieldError('applyType', 'Välj typ av restaurang.');
     isValid = false;
   }
   if (!payload.contact_person) {
@@ -180,20 +180,20 @@ function validateApplyPayload(payload) {
   return isValid;
 }
 
-// â”€â”€ Login â”€â”€
+// -- Login --
 async function login() {
   const email = document.getElementById('loginEmail').value.trim();
   const password = document.getElementById('loginPassword').value;
   const btn = document.getElementById('loginBtn');
-  if (!email || !password) { showMsg('loginMsg', 'Fyll i e-post och lÃ¶senord.', 'error'); return; }
+  if (!email || !password) { showMsg('loginMsg', 'Fyll i e-post och lösenord.', 'error'); return; }
 
   btn.disabled = true;
-  btn.innerHTML = '<div class="spinner-sm"></div> Loggar inâ€¦';
+  btn.innerHTML = '<div class="spinner-sm"></div> Loggar in…';
 
   const { data, error } = await sb.auth.signInWithPassword({ email, password });
 
   if (error) {
-    showMsg('loginMsg', 'Fel e-post eller lÃ¶senord.', 'error');
+    showMsg('loginMsg', 'Fel e-post eller lösenord.', 'error');
   } else if (data.session) {
     await handleSession(data.session, 'loginMsg');
   }
@@ -201,34 +201,34 @@ async function login() {
   btn.innerHTML = 'Logga in';
 }
 
-// â”€â”€ Register â”€â”€
+// -- Register --
 async function register() {
   const email = document.getElementById('regEmail').value.trim();
   const password = document.getElementById('regPassword').value;
   const confirm = document.getElementById('regConfirm').value;
   const btn = document.getElementById('regBtn');
-  if (!email || !password) { showMsg('regMsg', 'Fyll i alla fÃ¤lt.', 'error'); return; }
-  if (password.length < 6) { showMsg('regMsg', 'LÃ¶senordet mÃ¥ste vara minst 6 tecken.', 'error'); return; }
-  if (password !== confirm) { showMsg('regMsg', 'LÃ¶senorden matchar inte.', 'error'); return; }
+  if (!email || !password) { showMsg('regMsg', 'Fyll i alla fält.', 'error'); return; }
+  if (password.length < 6) { showMsg('regMsg', 'Lösenordet måste vara minst 6 tecken.', 'error'); return; }
+  if (password !== confirm) { showMsg('regMsg', 'Lösenorden matchar inte.', 'error'); return; }
 
   btn.disabled = true;
-  btn.innerHTML = '<div class="spinner-sm"></div> Skapar kontoâ€¦';
+  btn.innerHTML = '<div class="spinner-sm"></div> Skapar konto…';
 
   const { data, error } = await sb.auth.signUp({ email, password });
 
   if (error) {
-    showMsg('regMsg', 'NÃ¥got gick fel: ' + error.message, 'error');
+    showMsg('regMsg', 'Något gick fel: ' + error.message, 'error');
   } else if (data.session) {
-    showMsg('regMsg', 'âœ“ Konto skapat! Skickar ansÃ¶kanâ€¦', 'success');
+    showMsg('regMsg', '✓ Konto skapat! Skickar ansökan…', 'success');
     await handleSession(data.session, 'regMsg');
   } else {
-    showMsg('regMsg', 'âœ“ Konto skapat! BekrÃ¤fta din e-post och logga sedan in hÃ¤r.', 'success');
+    showMsg('regMsg', '✓ Konto skapat! Bekräfta din e-post och logga sedan in här.', 'success');
   }
   btn.disabled = false;
   btn.innerHTML = 'Skapa konto';
 }
 
-// â”€â”€ Check session â”€â”€
+// -- Check session --
 async function checkSession() {
   const { data: { session } } = await sb.auth.getSession();
   if (session) {
@@ -262,8 +262,8 @@ async function getPendingClaim(userId) {
 
 async function showPendingClaim(claim) {
   document.getElementById('pendingSub').textContent = claim?.restaurant_name
-    ? `Din ansÃ¶kan fÃ¶r ${claim.restaurant_name} vÃ¤ntar pÃ¥ granskning.`
-    : 'Din ansÃ¶kan vÃ¤ntar pÃ¥ granskning.';
+    ? `Din ansökan för ${claim.restaurant_name} väntar på granskning.`
+    : 'Din ansökan väntar på granskning.';
   renderPendingDetails(claim);
   showPage('pagePending');
 }
@@ -300,7 +300,7 @@ function renderPendingDetails(claim) {
   });
 }
 
-// â”€â”€ Load dashboard â”€â”€
+// -- Load dashboard --
 async function fetchOwnedRestaurant(userId) {
   const { data, error } = await sb
     .from('restaurants')
@@ -340,7 +340,7 @@ async function loadDashboard(user) {
   document.getElementById('dashName').textContent = restaurant.name;
   document.getElementById('dashSub').textContent = restaurant.address || 'Uppdatera din info nedan';
 
-  // HÃ¤mta dagens rÃ¤tter
+  // Hämta dagens rätter
   const today = new Date().toISOString().split('T')[0];
   const { data: dishes } = await sb
     .from('menus')
@@ -352,7 +352,7 @@ async function loadDashboard(user) {
   todayDishes = dishes || [];
   renderDishes();
 
-  // HÃ¤mta Ã¶ppettider
+  // Hämta öppettider
   const { data: hours } = await sb
     .from('opening_hours')
     .select('*')
@@ -361,7 +361,7 @@ async function loadDashboard(user) {
 
   buildHoursGrid(hours || []);
   if (hours?.length > 0) {
-    document.getElementById('hoursStatus').textContent = 'Tillagda âœ“';
+    document.getElementById('hoursStatus').textContent = 'Tillagda ✓';
     document.getElementById('hoursStatus').className = 'section-status set';
   }
 
@@ -369,13 +369,13 @@ async function loadDashboard(user) {
   showPage('pageDash');
 }
 
-// â”€â”€ Dishes state â”€â”€
+// -- Dishes state --
 let todayDishes = [];
 
 function renderDishes() {
   const list = document.getElementById('dishesList');
   if (todayDishes.length === 0) {
-    list.innerHTML = `<div class="dishes-empty">Inga rÃ¤tter tillagda Ã¤nnu</div>`;
+    list.innerHTML = `<div class="dishes-empty">Inga rätter tillagda ännu</div>`;
     document.getElementById('menuStatus').textContent = 'Ej tillagd';
     document.getElementById('menuStatus').className = 'section-status missing';
     return;
@@ -386,9 +386,9 @@ function renderDishes() {
         <div class="dish-item-name">${escapeHtml(d.description)}</div>
         ${d.price ? `<div class="dish-item-price">${escapeHtml(d.price)} kr</div>` : ''}
       </div>
-      <button class="dish-item-delete" onclick="deleteDish(${i})">âœ•</button>
+      <button class="dish-item-delete" onclick="deleteDish(${i})">✕</button>
     </div>`).join('')}</div>`;
-  document.getElementById('menuStatus').textContent = `${todayDishes.length} rÃ¤tt${todayDishes.length>1?'er':''}`;
+  document.getElementById('menuStatus').textContent = `${todayDishes.length} rätt${todayDishes.length>1?'er':''}`;
   document.getElementById('menuStatus').className = 'section-status set';
 }
 
@@ -411,7 +411,7 @@ async function addDish() {
   document.getElementById('dishDesc').value = '';
   document.getElementById('dishPrice').value = '';
   renderDishes();
-  showMsg('menuMsg', 'âœ“ RÃ¤tt tillagd!', 'success');
+  showMsg('menuMsg', '✓ Rätt tillagd!', 'success');
 }
 
 async function deleteDish(index) {
@@ -426,7 +426,7 @@ async function deleteDish(index) {
   renderDishes();
 }
 
-// â”€â”€ Save hours â”€â”€
+// -- Save hours --
 async function saveHours() {
   if (!currentRestaurant) return;
   const rows = [];
@@ -449,12 +449,12 @@ async function saveHours() {
     if (error) { showMsg('hoursMsg', 'Fel: ' + error.message, 'error'); return; }
   }
 
-  document.getElementById('hoursStatus').textContent = 'Tillagda âœ“';
+  document.getElementById('hoursStatus').textContent = 'Tillagda ✓';
   document.getElementById('hoursStatus').className = 'section-status set';
-  showMsg('hoursMsg', 'âœ“ Ã–ppettiderna Ã¤r sparade!', 'success');
+  showMsg('hoursMsg', '✓ Öppettiderna är sparade!', 'success');
 }
 
-// â”€â”€ Logout â”€â”€
+// -- Logout --
 async function logout() {
   await sb.auth.signOut();
   currentRestaurant = null;
@@ -463,7 +463,7 @@ async function logout() {
   showPage('pageLogin');
 }
 
-// â”€â”€ Helper â”€â”€
+// -- Helper --
 function showMsg(id, text, type) {
   const el = document.getElementById(id);
   el.className = 'msg ' + type;
@@ -471,7 +471,7 @@ function showMsg(id, text, type) {
   setTimeout(() => { el.textContent = ''; el.className = 'msg'; }, 5000);
 }
 
-// â”€â”€ Init â”€â”€
+// -- Init --
 sb.auth.onAuthStateChange((event, session) => {
   if (session && event !== 'INITIAL_SESSION') handleSession(session, 'loginMsg');
 });
@@ -499,7 +499,7 @@ async function applyRestaurant() {
   };
 
   if (!validateApplyPayload(claimPayload)) {
-    showMsg('applyMsg', 'Kontrollera fÃ¤lten ovan.', 'error');
+    showMsg('applyMsg', 'Kontrollera fälten ovan.', 'error');
     return;
   }
 
@@ -515,7 +515,7 @@ async function applyRestaurant() {
   }
 
   btn.disabled = false;
-  btn.innerHTML = 'AnsÃ¶k om restaurang';
+  btn.innerHTML = 'Ansök om restaurang';
 }
 
 
