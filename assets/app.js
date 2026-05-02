@@ -249,10 +249,18 @@ function renderRestaurantDetail(place) {
   const panel = createEl('article', 'detail-panel');
 
   const top = createEl('div', 'detail-top');
+  const topBar = createEl('div', 'detail-topbar');
   const back = createEl('button', 'detail-back', '← Tillbaka');
   back.type = 'button';
   back.addEventListener('click', () => closeRestaurantDetail());
-  top.appendChild(back);
+  topBar.appendChild(back);
+
+  const contact = createEl('div', 'detail-contact');
+  const addressLine = [place.address, [place.postal_code, place.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+  if (addressLine) contact.appendChild(createEl('span', 'detail-contact-item', `📍 ${addressLine}`));
+  if (place.phone) contact.appendChild(createEl('span', 'detail-contact-item', `📞 ${place.phone}`));
+  if (contact.children.length > 0) topBar.appendChild(contact);
+  top.appendChild(topBar);
 
   const hero = createEl('div', 'detail-hero');
   const titleWrap = createEl('div', 'detail-title-wrap');
@@ -271,6 +279,37 @@ function renderRestaurantDetail(place) {
 
   const content = createEl('div', 'detail-content');
 
+  const hoursSection = createEl('section', 'detail-section detail-hours-section');
+  const hoursToggle = createEl('button', 'detail-hours-toggle');
+  hoursToggle.type = 'button';
+  hoursToggle.setAttribute('aria-expanded', 'false');
+  const hoursLabel = createEl('div', 'detail-hours-toggle-text');
+  hoursLabel.appendChild(createEl('span', 'detail-section-title', 'Öppettider'));
+  hoursLabel.appendChild(createEl('span', 'detail-hours-today', todayHours ? `Idag ${todayHours}` : 'Öppettider saknas'));
+  const hoursChevron = createEl('span', 'detail-hours-chevron', 'Visa hela veckan ↓');
+  hoursToggle.append(hoursLabel, hoursChevron);
+  hoursSection.appendChild(hoursToggle);
+
+  if (Array.isArray(place.week_hours) && place.week_hours.length > 0) {
+    const week = createEl('div', 'detail-week-hours');
+    place.week_hours.forEach(row => {
+      const line = createEl('div', 'detail-week-row');
+      line.appendChild(createEl('span', '', dayLabel(row.day_of_week)));
+      line.appendChild(createEl('span', '', row.opens && row.closes ? `${row.lunch_opens || row.opens}-${row.lunch_closes || row.closes}` : 'Stängt'));
+      week.appendChild(line);
+    });
+    hoursSection.appendChild(week);
+    hoursToggle.addEventListener('click', () => {
+      const expanded = hoursSection.classList.toggle('expanded');
+      hoursToggle.setAttribute('aria-expanded', String(expanded));
+      hoursChevron.textContent = expanded ? 'Dölj veckan ↑' : 'Visa hela veckan ↓';
+    });
+  } else {
+    hoursToggle.disabled = true;
+    hoursChevron.textContent = '';
+  }
+  content.appendChild(hoursSection);
+
   if (dishes.length > 0) {
     const rows = dishes.map(dish => {
       const row = createEl('div', 'detail-menu-row');
@@ -284,24 +323,6 @@ function renderRestaurantDetail(place) {
       createEl('p', 'detail-muted', verified ? 'Ingen meny tillagd idag.' : 'Ingen bekräftad meny.')
     ]));
   }
-
-  const hourRows = [createEl('div', 'detail-hours-today', todayHours ? `Idag ${todayHours}` : 'Öppettider saknas')];
-  if (Array.isArray(place.week_hours) && place.week_hours.length > 0) {
-    const week = createEl('div', 'detail-week-hours');
-    place.week_hours.forEach(row => {
-      const line = createEl('div', 'detail-week-row');
-      line.appendChild(createEl('span', '', dayLabel(row.day_of_week)));
-      line.appendChild(createEl('span', '', row.opens && row.closes ? `${row.lunch_opens || row.opens}-${row.lunch_closes || row.closes}` : 'Stängt'));
-      week.appendChild(line);
-    });
-    hourRows.push(week);
-  }
-  content.appendChild(renderDetailSection('Öppettider', hourRows));
-
-  const infoRows = [];
-  if (place.address) infoRows.push(createEl('div', 'detail-info-row', place.address));
-  if (place.city || place.postal_code) infoRows.push(createEl('div', 'detail-info-row', [place.postal_code, place.city].filter(Boolean).join(' ')));
-  content.appendChild(renderDetailSection('Adress', infoRows.length ? infoRows : [createEl('p', 'detail-muted', 'Adress saknas')]));
 
   const actions = createEl('div', 'detail-actions');
   const favButton = createEl('button', 'detail-fav' + (isFavorite(osmId) ? ' saved' : ''), isFavorite(osmId) ? '❤️ Sparad' : '♡ Spara');
