@@ -2,6 +2,7 @@ create extension if not exists pgcrypto;
 
 create table if not exists public.claims (
   id uuid primary key default gen_random_uuid(),
+  user_id uuid,
   restaurant_name text not null,
   address text not null,
   postal_code text not null,
@@ -22,6 +23,7 @@ create table if not exists public.claims (
 );
 
 alter table public.claims
+  add column if not exists user_id uuid,
   add column if not exists restaurant_name text,
   add column if not exists address text,
   add column if not exists postal_code text,
