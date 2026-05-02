@@ -17,7 +17,7 @@ globalThis.__luunchNearbyCache = memoryCache;
 
 let supabase = null;
 try {
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   supabase = process.env.SUPABASE_URL && supabaseKey
     ? createClient(process.env.SUPABASE_URL, supabaseKey)
     : null;
@@ -412,65 +412,34 @@ function normalizeDedupeKey(restaurant) {
 
 async function getVerifiedManualRestaurants(lat, lon, category, radiusMeters) {
   if (!supabase) return [];
-  const { today, dayIndex, currentTime } = swedenNowParts();
 
   try {
     const { data: restaurants, error } = await supabase
       .from('restaurants')
-      .select('id, osm_id, source, source_id, name, phone, address, postal_code, city, category, type, lat, lon, verified, claimed, claimed_by_user_id')
-      .eq('verified', true)
+      .select('*')
       .not('lat', 'is', null)
-      .not('lon', 'is', null);
+      .not('lon', 'is', null)
+      .eq('verified', true);
 
     if (error) {
-      console.error('[nearby] Manual restaurants read failed', { message: error.message });
+      console.error('[nearby] Manual restaurants read failed', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint
+      });
       return [];
     }
 
-    if (!restaurants?.length) return [];
-
-    const nearbyRestaurants = restaurants
+    const manualRestaurants = (restaurants || [])
+      .filter(restaurant => restaurant.visible !== false)
       .map(restaurant => {
         const distance = Math.round(haversine(lat, lon, Number(restaurant.lat), Number(restaurant.lon)));
-        return { ...restaurant, distance_m: distance };
-      })
-      .filter(restaurant => restaurant.distance_m <= radiusMeters);
-
-    if (!nearbyRestaurants.length) return [];
-
-    const restaurantIds = nearbyRestaurants.map(r => r.id);
-    const [hours, { data: menus }] = await Promise.all([
-      fetchOpeningHours(restaurantIds, dayIndex),
-      supabase
-        .from('menus')
-        .select('restaurant_id, description, price')
-        .in('restaurant_id', restaurantIds)
-        .eq('date', today)
-    ]);
-
-    const hoursByRestaurant = new Map((hours || []).map(h => [h.restaurant_id, h]));
-    const menusByRestaurant = new Map();
-    for (const dish of menus || []) {
-      const dishes = menusByRestaurant.get(dish.restaurant_id) || [];
-      dishes.push({ description: dish.description, price: dish.price });
-      menusByRestaurant.set(dish.restaurant_id, dishes);
-    }
-
-    return nearbyRestaurants
-      .map(restaurant => {
-        const todayHours = hoursByRestaurant.get(restaurant.id);
-        const hoursStatus = getLuunchHoursStatus(todayHours, currentTime);
-        const tags = {
-          name: restaurant.name,
-          cuisine: restaurant.category || restaurant.type,
-          amenity: 'restaurant'
-        };
-
         return {
-          id: restaurant.osm_id || restaurant.source_id || restaurant.id,
+          id: `manual/${restaurant.id}`,
           restaurant_id: restaurant.id,
-          osm_id: restaurant.osm_id || restaurant.source_id || restaurant.id,
-          source: restaurant.source || 'manual',
+          osm_id: restaurant.osm_id || restaurant.source_id || `manual/${restaurant.id}`,
+          source: 'manual',
           priority: 0,
           name: restaurant.name,
           lat: Number(restaurant.lat),
@@ -478,29 +447,39 @@ async function getVerifiedManualRestaurants(lat, lon, category, radiusMeters) {
           address: restaurant.address || '',
           postal_code: restaurant.postal_code || null,
           city: restaurant.city || null,
-          category: restaurant.category || restaurant.type || 'Restaurang',
-          type_label: restaurant.type || restaurant.category || 'Restaurang',
-          emoji: getEmoji(tags),
-          distance_m: restaurant.distance_m,
+          category: restaurant.category || 'restaurant',
+          type_label: restaurant.category || 'Restaurang',
+          emoji: '🍽️',
+          distance_m: distance,
           opening_hours_raw: null,
           external_today_hours: null,
           external_is_open_now: null,
           external_open_status: 'unknown',
-          has_luunch_hours: Boolean(todayHours),
-          opening_hours_source: todayHours ? 'luunch' : null,
-          today_hours: todayHours ? hoursStatus.today_hours : null,
-          is_open_now: todayHours ? hoursStatus.is_open_now : null,
-          open_status: todayHours ? hoursStatus.open_status : 'unknown',
-          claimed: Boolean(restaurant.claimed || restaurant.claimed_by_user_id),
-          verified: Boolean(restaurant.verified),
+          has_luunch_hours: false,
+          opening_hours_source: null,
+          today_hours: null,
+          is_open_now: null,
+          open_status: 'unknown',
+          claimed: true,
+          verified: true,
           phone: restaurant.phone || null,
-          today_opens: todayHours?.lunch_opens || todayHours?.opens || null,
-          today_closes: todayHours?.lunch_closes || todayHours?.closes || null,
-          dishes: menusByRestaurant.get(restaurant.id) || [],
-          tags
+          today_opens: null,
+          today_closes: null,
+          dishes: [],
+          tags: {
+            name: restaurant.name,
+            cuisine: restaurant.category,
+            amenity: 'restaurant'
+          }
         };
       })
+      .filter(restaurant => restaurant.distance_m <= radiusMeters)
       .filter(restaurant => matchesCategory(restaurant, category));
+
+    console.log('Manual restaurants loaded:', manualRestaurants.length);
+    console.log(manualRestaurants.map(r => r.name));
+
+    return manualRestaurants;
   } catch (e) {
     console.error('[nearby] Manual restaurants crashed', { message: e.message, stack: e.stack });
     return [];
@@ -508,23 +487,18 @@ async function getVerifiedManualRestaurants(lat, lon, category, radiusMeters) {
 }
 
 function mergeVerifiedRestaurants(externalRestaurants, manualRestaurants) {
-  const merged = [...externalRestaurants];
+  const merged = [...manualRestaurants];
 
-  for (const manualRestaurant of manualRestaurants) {
-    const manualKey = normalizeDedupeKey(manualRestaurant);
+  for (const externalRestaurant of externalRestaurants) {
+    const externalKey = normalizeDedupeKey(externalRestaurant);
     const existingIndex = merged.findIndex(restaurant => {
-      return restaurant.osm_id === manualRestaurant.osm_id ||
-        restaurant.restaurant_id === manualRestaurant.restaurant_id ||
-        (manualKey && normalizeDedupeKey(restaurant) === manualKey);
+      return restaurant.osm_id === externalRestaurant.osm_id ||
+        restaurant.restaurant_id === externalRestaurant.restaurant_id ||
+        (externalKey && normalizeDedupeKey(restaurant) === externalKey);
     });
 
-    if (existingIndex >= 0) {
-      merged[existingIndex] = {
-        ...merged[existingIndex],
-        ...manualRestaurant
-      };
-    } else {
-      merged.push(manualRestaurant);
+    if (existingIndex === -1) {
+      merged.push(externalRestaurant);
     }
   }
 
