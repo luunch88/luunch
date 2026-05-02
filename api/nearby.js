@@ -410,6 +410,20 @@ function normalizeDedupeKey(restaurant) {
     .trim();
 }
 
+function normalizeNameAddressKey(restaurant) {
+  const name = String(restaurant.name || '').trim();
+  const address = String(restaurant.address || '').trim();
+  if (!name || !address) return '';
+
+  return [name, address]
+    .join('|')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 async function getVerifiedManualRestaurants(lat, lon, category, radiusMeters) {
   if (!supabase) return [];
 
@@ -487,20 +501,28 @@ async function getVerifiedManualRestaurants(lat, lon, category, radiusMeters) {
 }
 
 function mergeVerifiedRestaurants(externalRestaurants, manualRestaurants) {
-  const merged = [...manualRestaurants];
+  const manualDuplicateKeys = new Set(
+    manualRestaurants
+      .map(normalizeNameAddressKey)
+      .filter(Boolean)
+  );
+  const filteredExternalRestaurants = externalRestaurants.filter(restaurant => {
+    const externalKey = normalizeNameAddressKey(restaurant);
+    return !externalKey || !manualDuplicateKeys.has(externalKey);
+  });
+  const duplicatesRemoved = externalRestaurants.length - filteredExternalRestaurants.length;
+  const merged = [...manualRestaurants, ...filteredExternalRestaurants];
 
-  for (const externalRestaurant of externalRestaurants) {
-    const externalKey = normalizeDedupeKey(externalRestaurant);
-    const existingIndex = merged.findIndex(restaurant => {
-      return restaurant.osm_id === externalRestaurant.osm_id ||
-        restaurant.restaurant_id === externalRestaurant.restaurant_id ||
-        (externalKey && normalizeDedupeKey(restaurant) === externalKey);
-    });
-
-    if (existingIndex === -1) {
-      merged.push(externalRestaurant);
-    }
-  }
+  console.log('external count before merge:', externalRestaurants.length);
+  console.log('manual count:', manualRestaurants.length);
+  console.log('duplicates removed:', duplicatesRemoved);
+  console.log('final count:', merged.length);
+  console.log('[nearby] merge counts', {
+    externalBeforeMerge: externalRestaurants.length,
+    manual: manualRestaurants.length,
+    duplicatesRemoved,
+    final: merged.length
+  });
 
   return merged;
 }
