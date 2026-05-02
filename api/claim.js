@@ -9,7 +9,6 @@ const supabase = supabaseUrl && supabaseServiceKey
 
 const ALLOWED_STATUSES = new Set(['pending', 'approved', 'rejected']);
 const CLAIM_COLUMNS = [
-  'user_id',
   'restaurant_name',
   'address',
   'postal_code',
@@ -44,13 +43,13 @@ function getBearerToken(req) {
 
 function validatePayload(payload) {
   const required = [
-    ['restaurant_name', 'Restaurangnamn krÃ¤vs'],
-    ['address', 'Adress krÃ¤vs'],
-    ['postal_code', 'Postnummer krÃ¤vs'],
-    ['city', 'Ort krÃ¤vs'],
-    ['restaurant_type', 'Typ av restaurang krÃ¤vs'],
-    ['contact_person', 'Kontaktperson krÃ¤vs'],
-    ['email', 'E-post krÃ¤vs']
+    ['restaurant_name', 'Restaurangnamn krävs'],
+    ['address', 'Adress krävs'],
+    ['postal_code', 'Postnummer krävs'],
+    ['city', 'Ort krävs'],
+    ['restaurant_type', 'Typ av restaurang krävs'],
+    ['contact_person', 'Kontaktperson krävs'],
+    ['email', 'E-post krävs']
   ];
 
   for (const [field, message] of required) {
@@ -62,7 +61,7 @@ function validatePayload(payload) {
   }
 
   if (!EMAIL_RE.test(payload.email)) {
-    return 'E-postadressen Ã¤r ogiltig';
+    return 'E-postadressen är ogiltig';
   }
 
   if (payload.organization_number && !ORGANIZATION_NUMBER_RE.test(payload.organization_number)) {
@@ -100,7 +99,7 @@ export default async function handler(req, res) {
   }
   if (req.method === 'OPTIONS') return res.status(200).json({ ok: true });
   if (req.method !== 'POST') {
-    return res.status(405).json({ ok: false, error: 'Endast POST stÃ¶ds' });
+    return res.status(405).json({ ok: false, error: 'Endast POST stöds' });
   }
 
   try {
@@ -111,7 +110,13 @@ export default async function handler(req, res) {
       });
       return res.status(500).json({
         ok: false,
-        error: 'Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY'
+        error: 'Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY',
+        code: 'MISSING_SUPABASE_ENV',
+        details: {
+          hasSupabaseUrl: Boolean(supabaseUrl),
+          hasServiceRoleKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY)
+        },
+        hint: 'Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Vercel'
       });
     }
 
@@ -159,7 +164,9 @@ export default async function handler(req, res) {
       return res.status(500).json({
         ok: false,
         error: schemaError.message,
-        details: schemaError
+        code: schemaError.code,
+        details: schemaError.details,
+        hint: schemaError.hint
       });
     }
 
@@ -178,13 +185,15 @@ export default async function handler(req, res) {
       return res.status(500).json({
         ok: false,
         error: error.message,
-        details: error
+        code: error.code,
+        details: error.details,
+        hint: error.hint
       });
     }
 
     return res.status(201).json({
       ok: true,
-      message: 'AnsÃ¶kan mottagen'
+      message: 'Ansökan mottagen'
     });
   } catch (err) {
     console.error('[claim] Handler error', {
