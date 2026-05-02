@@ -9,6 +9,7 @@ const supabase = supabaseUrl && supabaseServiceKey
 
 const ALLOWED_STATUSES = new Set(['pending', 'approved', 'rejected']);
 const CLAIM_COLUMNS = [
+  'user_id',
   'restaurant_name',
   'address',
   'postal_code',
@@ -33,6 +34,12 @@ function cleanText(value) {
 function optionalText(value) {
   const cleaned = cleanText(value);
   return cleaned || null;
+}
+
+function getBearerToken(req) {
+  const header = req.headers.authorization || req.headers.Authorization || '';
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  return match?.[1] || null;
 }
 
 function validatePayload(payload) {
@@ -109,7 +116,21 @@ export default async function handler(req, res) {
     }
 
     const body = req.body || {};
+    let authenticatedUserId = null;
+    const token = getBearerToken(req);
+    if (token) {
+      const { data: authData, error: authError } = await supabase.auth.getUser(token);
+      if (authError) {
+        console.error('[claim] Could not verify optional user token', {
+          message: authError.message
+        });
+      } else {
+        authenticatedUserId = authData?.user?.id || null;
+      }
+    }
+
     const payload = {
+      user_id: authenticatedUserId || optionalText(body.user_id),
       restaurant_name: cleanText(body.restaurant_name),
       address: cleanText(body.address),
       postal_code: cleanText(body.postal_code),
