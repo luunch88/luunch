@@ -48,7 +48,7 @@ html, body { min-height: 100%; background: var(--bg); color: var(--ink); font-fa
 .msg { min-height: 18px; font-size: 0.82rem; color: var(--ink2); }
 .msg.error { color: var(--red); }
 .msg.success { color: var(--green); }
-.claims-list, .restaurants-list { display: grid; gap: 14px; }
+.claims-list, .restaurants-list, .duplicates-list { display: grid; gap: 14px; }
 .claim-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
 .claim-title { font-size: 1.05rem; font-weight: 900; line-height: 1.3; }
 .status-pill { border-radius: 99px; border: 1px solid var(--border); color: var(--ink2); font-size: 0.72rem; font-weight: 900; padding: 5px 9px; text-transform: uppercase; }
@@ -69,6 +69,18 @@ html, body { min-height: 100%; background: var(--bg); color: var(--ink); font-fa
 .restaurant-row { display: grid; gap: 5px; }
 .restaurant-row-title { font-weight: 900; font-size: 0.96rem; }
 .restaurant-row-meta { color: var(--ink2); font-size: 0.8rem; line-height: 1.45; }
+.duplicates-list { margin-top: 14px; }
+.duplicate-group { background: rgba(255,255,255,0.025); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; display: grid; gap: 10px; }
+.duplicate-title { font-weight: 900; color: var(--ink); font-size: 0.95rem; }
+.duplicate-row { display: grid; gap: 10px; align-items: center; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px; }
+.duplicate-row-main { display: grid; gap: 4px; min-width: 0; }
+.duplicate-name { font-weight: 900; color: var(--ink); font-size: 0.9rem; overflow-wrap: anywhere; }
+.duplicate-meta { color: var(--ink2); font-size: 0.78rem; line-height: 1.45; overflow-wrap: anywhere; }
+.duplicate-row-actions { display: flex; gap: 8px; align-items: center; justify-content: flex-start; }
+.duplicate-badge { border: 1px solid rgba(76,175,125,0.28); background: rgba(76,175,125,0.1); color: var(--green); border-radius: 99px; font-size: 0.68rem; font-weight: 900; padding: 5px 8px; white-space: nowrap; }
+.duplicate-badge.protected { border-color: rgba(240,101,26,0.28); background: rgba(240,101,26,0.1); color: var(--accent); }
+.duplicate-delete { min-height: 34px; padding: 7px 10px; font-size: 0.76rem; }
+.duplicate-delete:disabled { opacity: 0.42; cursor: not-allowed; border-color: var(--border); color: var(--ink2); }
 .import-result { color: var(--ink2); font-size: 0.86rem; margin-top: 14px; line-height: 1.55; }
 
 @media (min-width: 760px) {
@@ -83,4 +95,6 @@ html, body { min-height: 100%; background: var(--bg); color: var(--ink); font-fa
   .claim-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .claim-actions { grid-template-columns: minmax(0, 1fr) minmax(230px, 1.2fr) minmax(180px, 1fr) 130px 130px; align-items: start; }
   .admin-location-group { grid-template-columns: 1fr 1fr; }
+  .duplicate-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .duplicate-row-actions { justify-content: flex-end; }
 }
