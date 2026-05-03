@@ -18,10 +18,9 @@ function updateClock() {
   const h = now.getHours();
   const m = String(now.getMinutes()).padStart(2, '0');
   document.getElementById('timePill').textContent = `${h}:${m}`;
-  const isLunch = h >= 11 && h < 14;
-  document.getElementById('lunchDot').className = 'lunch-dot' + (isLunch ? ' active' : '');
+  document.getElementById('activityDot').className = 'activity-dot active';
   const tag = document.getElementById('heroTag');
-  tag.textContent = isLunch ? '🟢 Lunch pågår just nu' : h < 11 ? `⏳ Lunch om ${11 - h} timmar` : '✅ Lunch avslutad';
+  tag.textContent = 'Mat nära dig';
 }
 
 function getFavorites() {
@@ -53,10 +52,10 @@ function walkingLabel(distance) {
 }
 
 function statusBadgeText(openStatus, hasOwnHours) {
-  if (!hasOwnHours) return '⏰ Öppettider saknas';
-  if (openStatus === 'open') return '🍽️ Lunch öppet nu';
-  if (openStatus === 'closed') return '🌙 Lunch stängt';
-  return '⏰ Öppettider saknas';
+  if (!hasOwnHours) return '⏰ Öppettider ej angivna';
+  if (openStatus === 'open') return '🟢 Öppet nu';
+  if (openStatus === 'closed') return '🌙 Stängt';
+  return '⏰ Öppettider ej angivna';
 }
 
 function restaurantRouteId(place) {
@@ -150,7 +149,7 @@ function buildCard(place) {
     menu.appendChild(fullMenu);
     body.appendChild(menu);
   } else {
-    body.appendChild(createEl('div', 'card-missing', verified ? 'Ingen meny tillagd' : 'Ingen bekräftad meny'));
+    body.appendChild(createEl('div', 'card-missing', 'Ingen meny upplagd ännu'));
   }
 
   if (todayHours) {
@@ -295,7 +294,7 @@ function renderRestaurantDetail(place) {
   hoursToggle.setAttribute('aria-expanded', 'false');
   const hoursLabel = createEl('div', 'detail-hours-toggle-text');
   hoursLabel.appendChild(createEl('span', 'detail-section-title', 'Öppettider'));
-  hoursLabel.appendChild(createEl('span', 'detail-hours-today', todayHours ? `Idag ${todayHours}` : 'Öppettider saknas'));
+  hoursLabel.appendChild(createEl('span', 'detail-hours-today', todayHours ? `Idag ${todayHours}` : 'Öppettider ej angivna'));
   const hoursChevron = createEl('span', 'detail-hours-chevron', 'Veckans öppettider ↓');
   hoursToggle.append(hoursLabel, hoursChevron);
   hoursSection.appendChild(hoursToggle);
@@ -305,7 +304,7 @@ function renderRestaurantDetail(place) {
     place.week_hours.forEach(row => {
       const line = createEl('div', 'detail-week-row');
       line.appendChild(createEl('span', '', dayLabel(row.day_of_week)));
-      line.appendChild(createEl('span', '', row.opens && row.closes ? `${row.lunch_opens || row.opens}-${row.lunch_closes || row.closes}` : 'Stängt'));
+      line.appendChild(createEl('span', '', row.opens && row.closes ? `${row.opens}-${row.closes}` : 'Stängt'));
       week.appendChild(line);
     });
     hoursSection.appendChild(week);
@@ -323,14 +322,14 @@ function renderRestaurantDetail(place) {
   if (dishes.length > 0) {
     const rows = dishes.map(dish => {
       const row = createEl('div', 'detail-menu-row');
-      row.appendChild(createEl('div', 'detail-menu-name', dish.description || dish.title || 'Dagens lunch'));
+      row.appendChild(createEl('div', 'detail-menu-name', dish.description || dish.title || 'Meny'));
       if (dish.price) row.appendChild(createEl('div', 'detail-menu-price', `${dish.price} kr`));
       return row;
     });
-    content.appendChild(renderDetailSection('Dagens meny', rows));
+    content.appendChild(renderDetailSection('Meny', rows));
   } else {
-    content.appendChild(renderDetailSection('Dagens meny', [
-      createEl('p', 'detail-muted', verified ? 'Ingen meny tillagd idag.' : 'Ingen bekräftad meny.')
+    content.appendChild(renderDetailSection('Meny', [
+      createEl('p', 'detail-muted', verified ? 'Ingen meny upplagd ännu.' : 'Ingen bekräftad meny.')
     ]));
   }
 
@@ -603,7 +602,7 @@ function showDeals() {
     <div class="empty-state">
       <div class="empty-emoji">⚡</div>
       <h3>Deals kommer snart</h3>
-      <p>Restauranger kan snart lägga till<br>luncherbjudanden här.</p>
+      <p>Restauranger kan snart lägga till<br>erbjudanden här.</p>
     </div>`;
   setStatus('');
 }
@@ -614,13 +613,13 @@ async function loadNearby() {
   const sub = document.getElementById('locateSub');
   label.textContent = 'Söker restauranger…';
   sub.textContent = 'Kollar vad som är nära';
-  setStatus('Söker lunchställen…');
+  setStatus('Söker restauranger…');
   hideNotice();
 
   const payload = await window.LuunchAPI.getNearby({ lat: userLat, lon: userLon, category: 'alla' });
   allRestaurants = sortByDistance(payload.restaurants || []);
   renderRestaurantState();
-  if (allRestaurants.length > 0) showToast(`${allRestaurants.length} lunchställen nära dig! 🍽️`);
+  if (allRestaurants.length > 0) showToast(`${allRestaurants.length} restauranger nära dig! 🍽️`);
 }
 
 async function filterChip(el, type) {
@@ -681,7 +680,7 @@ async function locate() {
     sub.textContent = 'Uppdatera resultat';
   }, err => {
     btn.classList.remove('loading');
-    label.textContent = 'Hitta lunch nära mig';
+    label.textContent = 'Hitta käk nära mig';
     sub.textContent = 'Öppna restauranger inom gångavstånd';
     showError({
       1: 'Platsbehörighet nekad — tillåt platsdelning i webbläsaren.',
