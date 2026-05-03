@@ -167,6 +167,7 @@
       if (claim.restaurant_name) params.set('q', claim.restaurant_name);
       if (claim.city) params.set('city', claim.city);
       if (claim.address) params.set('address', claim.address);
+      params.set('refresh_external', '1');
       const res = await fetch(`/api/restaurants/search?${params.toString()}`);
       const data = await res.json().catch(() => ({ ok: false, error: 'API:t returnerade inte JSON.' }));
       if (!res.ok || data.ok === false) throw new Error(data.error || 'Kunde inte söka matchningar.');
