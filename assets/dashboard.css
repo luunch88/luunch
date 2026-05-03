@@ -65,6 +65,21 @@ header {
 .msg.error { background: rgba(224,82,82,0.08); color: var(--red); border: 1px solid rgba(224,82,82,0.2); }
 
 /* ── DASHBOARD PAGE ── */
+.dashboard-shell { display: grid; gap: 16px; max-width: 1180px; margin: 0 auto; }
+.dashboard-sidebar { background: rgba(26,25,22,0.86); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; position: sticky; top: 70px; z-index: 5; }
+.dashboard-sidebar::-webkit-scrollbar { display: none; }
+.sidebar-restaurant { display: none; color: var(--ink); font-weight: 800; font-size: 0.95rem; padding: 10px 10px 12px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+.side-nav { background: transparent; color: var(--ink2); border: 1px solid transparent; border-radius: 12px; padding: 10px 12px; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 0.82rem; font-weight: 800; cursor: pointer; white-space: nowrap; text-align: left; }
+.side-nav.active { color: white; background: rgba(240,101,26,0.16); border-color: rgba(240,101,26,0.26); box-shadow: 0 8px 22px rgba(240,101,26,0.08); }
+.dashboard-main { min-width: 0; }
+.dash-section { display: none; animation: fadeUp 0.22s ease; }
+.dash-section.active { display: block; }
+.summary-grid { display: grid; gap: 12px; grid-template-columns: 1fr; margin-bottom: 14px; }
+.summary-card { background: linear-gradient(180deg, var(--surface), #171612); border: 1px solid rgba(242,237,228,0.08); border-radius: var(--radius); padding: 16px; }
+.summary-label { color: var(--ink2); font-size: 0.68rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 7px; }
+.summary-value { color: var(--ink); font-size: 1rem; font-weight: 800; line-height: 1.35; overflow-wrap: anywhere; }
+.quick-actions { display: grid; gap: 10px; grid-template-columns: 1fr; }
+.sidebar-logout { margin-top: 0; flex: 0 0 auto; width: auto; padding: 10px 12px; }
 .dash-greeting { margin-bottom: 24px; }
 .dash-greeting h2 { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 1.4rem; letter-spacing: -0.03em; margin-bottom: 4px; }
 .dash-greeting p { font-size: 0.82rem; color: var(--ink2); font-weight: 300; }
@@ -90,8 +105,19 @@ header {
 .admin-action-row .btn-secondary, .admin-action-row .btn-primary { margin-top: 0; }
 
 @media (min-width: 720px) {
+  .page { padding-left: 24px; padding-right: 24px; }
+  .dashboard-shell { grid-template-columns: 240px minmax(0, 1fr); align-items: start; }
+  .dashboard-sidebar { flex-direction: column; overflow: visible; padding: 14px; }
+  .sidebar-restaurant { display: block; }
+  .sidebar-logout { width: 100%; margin-top: 10px; }
+  .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .quick-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .admin-action-row { grid-template-columns: 1fr auto; align-items: center; }
   .admin-action-row.manual { grid-template-columns: 1fr 1fr auto; }
+}
+
+@media (min-width: 980px) {
+  .summary-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 
 /* Menu form */
@@ -121,7 +147,7 @@ header {
 .dish-item-info { flex: 1; min-width: 0; }
 .dish-item-name { font-size: 0.85rem; font-weight: 500; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dish-item-price { font-size: 0.75rem; color: var(--accent); font-weight: 600; }
-.dish-item-delete { background: transparent; border: 1px solid var(--border); border-radius: 8px; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 0.9rem; color: var(--ink2); flex-shrink: 0; transition: border-color 0.15s, color 0.15s; }
+.dish-item-delete { background: transparent; border: 1px solid var(--border); border-radius: 8px; min-width: 74px; height: 32px; padding: 0 9px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 0.76rem; font-weight: 800; color: var(--ink2); flex-shrink: 0; transition: border-color 0.15s, color 0.15s; }
 .dish-item-delete:hover { border-color: var(--red); color: var(--red); }
 .dishes-empty { font-size: 0.8rem; color: var(--ink2); text-align: center; padding: 14px; background: var(--surface2); border: 1px dashed var(--border); border-radius: var(--radius-sm); margin-bottom: 14px; }
 
