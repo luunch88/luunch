@@ -72,7 +72,7 @@ function buildCard(place) {
   const emoji = place.emoji || '🍽️';
   const typeLabel = place.type_label || place.category || 'Restaurang';
   const address = place.address || '';
-  const dishes = Array.isArray(place.dishes) ? place.dishes : [];
+  const dishes = Array.isArray(place.dishes) ? place.dishes.slice(0, 2) : [];
   const hasOwnHours = (place.claimed === true || place.verified === true) && place.has_luunch_hours === true;
   const todayHours = hasOwnHours
     ? place.today_hours || (place.today_opens && place.today_closes ? `${place.today_opens}-${place.today_closes}` : null)
@@ -125,7 +125,7 @@ function buildCard(place) {
   if (dishes.length > 0) {
     const menu = createEl('div', 'card-menu');
     const menuHead = createEl('div', 'card-menu-head');
-    menuHead.appendChild(createEl('div', 'card-menu-label', 'DAGENS LUNCH'));
+    menuHead.appendChild(createEl('div', 'card-menu-label', 'Populära rätter'));
     if (verified) menuHead.appendChild(createEl('div', 'card-menu-fresh', 'Uppdaterad idag'));
     menu.appendChild(menuHead);
 
@@ -141,6 +141,13 @@ function buildCard(place) {
       }
       menu.appendChild(item);
     });
+    const fullMenu = createEl('button', 'card-menu-more', 'Visa hela menyn →');
+    fullMenu.type = 'button';
+    fullMenu.addEventListener('click', event => {
+      event.stopPropagation();
+      openRestaurantDetail(place);
+    });
+    menu.appendChild(fullMenu);
     body.appendChild(menu);
   } else {
     body.appendChild(createEl('div', 'card-missing', verified ? 'Ingen meny tillagd' : 'Ingen bekräftad meny'));
