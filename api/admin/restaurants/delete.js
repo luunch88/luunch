@@ -1,6 +1,10 @@
 import { applyCors } from '../../_cors.js';
 import { cleanText, getSupabaseAdmin, requireAdminSecret } from '../_admin.js';
 
+function isTrue(value) {
+  return value === true || value === 'true' || value === 1 || value === '1';
+}
+
 export default async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
@@ -29,7 +33,7 @@ export default async function handler(req, res) {
     if (readError) return res.status(500).json({ ok: false, error: readError.message });
     if (!restaurant) return res.status(404).json({ ok: false, error: 'Restaurangen hittades inte' });
 
-    if (restaurant.claimed || restaurant.verified || restaurant.claimed_by_user_id || restaurant.owner_user_id) {
+    if (isTrue(restaurant.claimed) || isTrue(restaurant.verified) || restaurant.claimed_by_user_id || restaurant.owner_user_id) {
       return res.status(409).json({
         ok: false,
         error: 'Kan inte ta bort claimad/verifierad restaurang.'
