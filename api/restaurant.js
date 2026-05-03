@@ -118,7 +118,7 @@ export default async function handler(req, res) {
       fetchOpeningHours(restaurant.id),
       supabase
         .from('menus')
-        .select('description, price')
+        .select('description, price, is_featured, created_at')
         .eq('restaurant_id', restaurant.id)
         .order('created_at')
     ]);
@@ -139,7 +139,8 @@ export default async function handler(req, res) {
     const dishes = (menusResult.data || []).map(dish => ({
       title: dish.description,
       description: dish.description,
-      price: dish.price
+      price: dish.price,
+      is_featured: dish.is_featured === true
     }));
 
     return res.status(200).json({
