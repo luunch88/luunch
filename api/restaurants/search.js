@@ -25,6 +25,24 @@ function restaurantStatus(restaurant) {
   return restaurant.status || 'unclaimed';
 }
 
+function missingColumn(error) {
+  const text = [error?.message, error?.details, error?.hint].filter(Boolean).join(' ');
+  return text.match(/'([^']+)' column/)?.[1] || null;
+}
+
+async function runRestaurantSearch(supabase, filters, columns) {
+  let query = supabase
+    .from('restaurants')
+    .select(columns.join(', '))
+    .limit(50);
+
+  if (filters.q) query = query.ilike('name', `%${filters.q}%`);
+  if (filters.city) query = query.ilike('city', `%${filters.city}%`);
+  if (filters.address) query = query.ilike('address', `%${filters.address}%`);
+
+  return query;
+}
+
 export default async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
@@ -45,16 +63,16 @@ export default async function handler(req, res) {
       return res.status(400).json({ ok: false, error: 'Söktext krävs' });
     }
 
-    let query = supabase
-      .from('restaurants')
-      .select('id, name, address, postal_code, city, category, status, owner_user_id, claimed, verified')
-      .limit(50);
+    let columns = ['id', 'name', 'address', 'postal_code', 'city', 'category', 'status', 'owner_user_id', 'claimed', 'verified'];
+    let { data, error } = await runRestaurantSearch(supabase, { q, city, address }, columns);
+    for (let attempt = 0; error && attempt < 4; attempt += 1) {
+      const column = missingColumn(error);
+      if (error.code !== 'PGRST204' || !column || !columns.includes(column)) break;
+      columns = columns.filter(item => item !== column);
+      console.warn('[restaurants search] retrying without missing column', { column, columns });
+      ({ data, error } = await runRestaurantSearch(supabase, { q, city, address }, columns));
+    }
 
-    if (q) query = query.ilike('name', `%${q}%`);
-    if (city) query = query.ilike('city', `%${city}%`);
-    if (address) query = query.ilike('address', `%${address}%`);
-
-    const { data, error } = await query;
     if (error) {
       console.error('[restaurants search] failed', {
         message: error.message,
