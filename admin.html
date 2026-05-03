@@ -68,6 +68,12 @@
           <input class="form-input compact-input" id="restaurantQuery" type="search" placeholder="Namn, stad eller adress">
           <button class="btn-primary" id="loadRestaurantsBtn" type="button">Hämta restauranger</button>
         </div>
+        <div class="panel">
+          <h2 class="panel-title">Dubbletter</h2>
+          <p class="panel-text">Hitta möjliga dubbletter baserat på namn och stad. Granska innan du tar bort något.</p>
+          <button class="btn-secondary" id="findDuplicatesBtn" type="button">Hitta dubbletter</button>
+          <div class="duplicates-list" id="duplicatesList"></div>
+        </div>
         <section class="restaurants-list" id="restaurantsList"></section>
       </section>
 
