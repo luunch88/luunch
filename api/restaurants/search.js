@@ -24,6 +24,15 @@ function escapeRegex(value) {
   return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function flexibleNameRegex(value) {
+  const compact = normalize(value).replace(/\s+/g, '');
+  if (!compact) return '';
+  return compact
+    .split('')
+    .map(char => escapeRegex(char))
+    .join('\\s*');
+}
+
 function includesNormalized(source, needle) {
   if (!needle) return true;
   const sourceNorm = normalize(source);
@@ -235,7 +244,7 @@ async function fetchOverpassCandidates(filters) {
     return [];
   }
 
-  const safeName = escapeRegex(normalize(filters.q)).replace(/\s+/g, '.*');
+  const safeName = flexibleNameRegex(filters.q);
   const query = `[out:json][timeout:20];(node["amenity"~"restaurant|cafe|fast_food|bar|bakery|pub"]["name"~"${safeName}",i](around:7000,${center.lat},${center.lon});way["amenity"~"restaurant|cafe|fast_food|bar|bakery|pub"]["name"~"${safeName}",i](around:7000,${center.lat},${center.lon}););out center tags;`;
   const errors = [];
 
