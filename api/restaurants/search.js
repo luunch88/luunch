@@ -544,6 +544,30 @@ async function importExternalCandidates(supabase, candidates) {
   return imported;
 }
 
+function restaurantKey(restaurant) {
+  return [
+    restaurant.id || restaurant.source_id || restaurant.osm_id || '',
+    normalize(restaurant.name),
+    normalize(restaurant.address),
+    normalize(restaurant.city)
+  ].join('|');
+}
+
+function mergeRestaurants(existing, imported) {
+  const seen = new Set();
+  const merged = [];
+  for (const restaurant of [...existing, ...imported]) {
+    const key = restaurantKey(restaurant);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push({
+      ...restaurant,
+      status: restaurantStatus(restaurant)
+    });
+  }
+  return merged;
+}
+
 export default async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
@@ -593,36 +617,35 @@ export default async function handler(req, res) {
         status: restaurantStatus(restaurant)
       }));
 
-    if (restaurants.length === 0 && (q || city)) {
+    if (q || city) {
       let externalCandidates = await fetchSnapshotCandidates(supabase, { q, city, address });
-      if (externalCandidates.length === 0) {
+      if (externalCandidates.length === 0 && restaurants.length === 0) {
         externalCandidates = q
           ? await fetchExternalCandidates({ q, city, address })
           : [];
       }
-      if (externalCandidates.length === 0) {
+      if (externalCandidates.length === 0 && restaurants.length === 0) {
         externalCandidates = q
           ? await fetchExternalCandidatesBroad({ q, city, address })
           : [];
       }
-      if (externalCandidates.length === 0) {
+      if (externalCandidates.length === 0 && q && restaurants.length === 0) {
         externalCandidates = q
           ? await fetchOverpassCandidates({ q, city, address })
           : [];
       }
-      if (externalCandidates.length === 0 && city) {
-        externalCandidates = await fetchOverpassCityCandidates({ q, city, address });
+      if (city) {
+        const cityCandidates = await fetchOverpassCityCandidates({ q, city, address });
+        externalCandidates = [...externalCandidates, ...cityCandidates];
       }
       const imported = await importExternalCandidates(supabase, externalCandidates);
-      restaurants = imported.map(restaurant => ({
-        ...restaurant,
-        status: restaurantStatus(restaurant)
-      }));
+      restaurants = mergeRestaurants(restaurants, imported);
       console.log('[restaurants search] external fallback imported', {
         query: q,
         city,
         externalCandidates: externalCandidates.length,
-        imported: imported.length
+        imported: imported.length,
+        final: restaurants.length
       });
     }
 
