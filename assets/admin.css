@@ -13,57 +13,74 @@
   --radius-sm: 12px;
 }
 html, body { min-height: 100%; background: var(--bg); color: var(--ink); font-family: 'Plus Jakarta Sans', sans-serif; }
-.admin-header { background: rgba(15,14,12,0.92); backdrop-filter: blur(20px); border-bottom: 1px solid var(--border); padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; }
+.admin-header { background: rgba(15,14,12,0.92); backdrop-filter: blur(20px); border-bottom: 1px solid var(--border); padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 20; }
 .logo { font-family: 'Playfair Display', serif; font-weight: 900; font-size: 1.4rem; text-decoration: none; color: var(--ink); }
 .logo span { color: var(--accent); }
-.header-tag { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink2); background: var(--surface); border: 1px solid var(--border); padding: 4px 10px; border-radius: 99px; }
-.admin-shell { width: min(1040px, 100%); margin: 0 auto; padding: 28px 18px 60px; }
+.header-tag { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink2); background: var(--surface); border: 1px solid var(--border); padding: 4px 10px; border-radius: 99px; }
+.admin-login { display: none; width: min(460px, 100%); margin: 0 auto; padding: 46px 18px; }
+.admin-login.active { display: block; }
+.login-panel, .panel, .claim-card, .restaurant-row { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; }
 .admin-hero { margin-bottom: 22px; }
-.admin-hero h1 { font-family: 'Playfair Display', serif; font-size: 2rem; line-height: 1.1; margin-bottom: 6px; }
-.admin-hero p { color: var(--ink2); font-size: 0.9rem; }
-.admin-section-title { font-family: 'Playfair Display', serif; font-size: 1.15rem; margin: 24px 0 12px; }
-.panel, .claim-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; margin-bottom: 14px; }
-.form-label { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink2); margin-bottom: 8px; display: block; }
+.admin-hero h1, .admin-top h1 { font-family: 'Playfair Display', serif; font-size: 2rem; line-height: 1.1; margin-bottom: 6px; }
+.admin-hero p, .admin-top p, .panel-text { color: var(--ink2); font-size: 0.9rem; line-height: 1.55; }
+.admin-app { display: none; min-height: calc(100vh - 65px); }
+.admin-app.active { display: grid; }
+.admin-sidebar { background: #13120F; border-right: 1px solid var(--border); padding: 16px; display: flex; gap: 8px; overflow-x: auto; position: sticky; top: 65px; z-index: 10; }
+.sidebar-title { display: none; color: var(--ink); font-weight: 900; padding: 8px 10px 14px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+.admin-nav { background: transparent; border: 1px solid transparent; color: var(--ink2); border-radius: 12px; padding: 10px 12px; font: inherit; font-size: 0.82rem; font-weight: 900; white-space: nowrap; cursor: pointer; text-align: left; }
+.admin-nav.active { color: #fff; background: rgba(240,101,26,0.16); border-color: rgba(240,101,26,0.28); }
+.admin-logout { flex: 0 0 auto; }
+.admin-main { min-width: 0; padding: 22px 18px 56px; }
+.admin-top { display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; }
+.admin-section { display: none; }
+.admin-section.active { display: block; }
+.toolbar-panel { display: grid; gap: 10px; align-items: end; margin-bottom: 14px; }
+.panel-title { font-family: 'Playfair Display', serif; font-size: 1.18rem; margin-bottom: 6px; }
+.form-label { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink2); margin-bottom: 8px; display: block; }
 .form-input { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--ink); font: inherit; font-size: 0.9rem; padding: 12px 13px; margin-bottom: 14px; outline: none; }
 .form-input:focus { border-color: var(--accent); }
+.compact-input { margin-bottom: 0; }
 .secret-row { display: grid; gap: 10px; }
-.btn-primary, .btn-secondary { border: none; border-radius: var(--radius-sm); cursor: pointer; font: inherit; font-size: 0.86rem; font-weight: 700; padding: 12px 14px; min-height: 44px; }
-.btn-primary { background: var(--accent); color: white; }
+.btn-primary, .btn-secondary { border-radius: var(--radius-sm); cursor: pointer; font: inherit; font-size: 0.86rem; font-weight: 900; padding: 12px 14px; min-height: 44px; }
+.btn-primary { background: var(--accent); color: white; border: 1px solid rgba(255,255,255,0.08); }
 .btn-secondary { background: transparent; border: 1px solid var(--border); color: var(--ink2); }
 .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
-.msg { min-height: 18px; font-size: 0.82rem; margin-top: 8px; color: var(--ink2); }
+.msg { min-height: 18px; font-size: 0.82rem; color: var(--ink2); }
 .msg.error { color: var(--red); }
 .msg.success { color: var(--green); }
-.claims-list { display: grid; gap: 14px; }
+.claims-list, .restaurants-list { display: grid; gap: 14px; }
 .claim-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
-.claim-title { font-size: 1.05rem; font-weight: 800; line-height: 1.3; }
-.status-pill { border-radius: 99px; border: 1px solid var(--border); color: var(--ink2); font-size: 0.72rem; font-weight: 800; padding: 5px 9px; text-transform: uppercase; }
+.claim-title { font-size: 1.05rem; font-weight: 900; line-height: 1.3; }
+.status-pill { border-radius: 99px; border: 1px solid var(--border); color: var(--ink2); font-size: 0.72rem; font-weight: 900; padding: 5px 9px; text-transform: uppercase; }
 .status-pill.pending { color: var(--accent); background: rgba(240,101,26,0.1); }
 .status-pill.approved { color: var(--green); background: rgba(76,175,125,0.1); }
 .status-pill.rejected { color: var(--red); background: rgba(224,82,82,0.08); }
 .claim-grid { display: grid; gap: 9px; margin-bottom: 14px; }
 .claim-field { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; }
-.claim-label { color: var(--ink2); font-size: 0.66rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 4px; }
+.claim-label { color: var(--ink2); font-size: 0.66rem; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 4px; }
 .claim-value { color: var(--ink); font-size: 0.86rem; line-height: 1.45; overflow-wrap: anywhere; }
 .claim-actions { display: grid; gap: 10px; }
-.admin-match-group { display: grid; gap: 8px; }
+.admin-match-group, .admin-location-group { display: grid; gap: 8px; }
 .admin-match-list { display: grid; gap: 7px; }
 .admin-match-option { display: flex; align-items: flex-start; gap: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 9px 10px; color: var(--ink); font-size: 0.78rem; line-height: 1.4; cursor: pointer; }
 .admin-match-option input { margin-top: 2px; accent-color: var(--accent); }
-.admin-match-empty { color: var(--ink2); font-size: 0.78rem; line-height: 1.45; border: 1px dashed var(--border); border-radius: 10px; padding: 9px 10px; }
+.admin-match-empty, .empty { color: var(--ink2); font-size: 0.82rem; line-height: 1.45; border: 1px dashed var(--border); border-radius: var(--radius); padding: 16px; text-align: center; }
 .admin-match-empty.error { color: var(--red); border-color: rgba(224,82,82,0.28); }
-.claim-actions.simple { grid-template-columns: 1fr; }
-.admin-location-group { display: grid; gap: 8px; }
-.admin-location-group .form-input { margin-bottom: 0; }
-.admin-location-help { margin: -2px 0 4px; }
-.field-help { color: var(--ink2); font-size: 0.72rem; line-height: 1.45; }
-.empty { color: var(--ink2); text-align: center; border: 1px dashed var(--border); border-radius: var(--radius); padding: 22px; }
+.restaurant-row { display: grid; gap: 5px; }
+.restaurant-row-title { font-weight: 900; font-size: 0.96rem; }
+.restaurant-row-meta { color: var(--ink2); font-size: 0.8rem; line-height: 1.45; }
+.import-result { color: var(--ink2); font-size: 0.86rem; margin-top: 14px; line-height: 1.55; }
 
-@media (min-width: 720px) {
+@media (min-width: 760px) {
+  .admin-app.active { grid-template-columns: 250px minmax(0, 1fr); }
+  .admin-sidebar { flex-direction: column; overflow: visible; align-self: start; min-height: calc(100vh - 65px); }
+  .sidebar-title { display: block; }
+  .admin-logout { margin-top: auto; }
+  .admin-main { padding: 30px 28px 64px; }
+  .admin-top { flex-direction: row; justify-content: space-between; align-items: flex-start; }
+  .toolbar-panel { grid-template-columns: auto minmax(220px, 1fr) auto; }
   .secret-row { grid-template-columns: 1fr auto; align-items: start; }
   .claim-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .claim-actions { grid-template-columns: minmax(0, 1fr) minmax(220px, 1.2fr) minmax(180px, 1fr) 140px 140px; align-items: start; }
-  .claim-actions.simple { grid-template-columns: repeat(2, 170px); justify-content: end; }
+  .claim-actions { grid-template-columns: minmax(0, 1fr) minmax(230px, 1.2fr) minmax(180px, 1fr) 130px 130px; align-items: start; }
   .admin-location-group { grid-template-columns: 1fr 1fr; }
-  .admin-location-help { grid-column: 1 / -1; }
 }
