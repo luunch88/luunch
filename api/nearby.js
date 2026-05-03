@@ -210,6 +210,21 @@ function getOsmOpeningStatus(openingHoursRaw, currentTime) {
   };
 }
 
+function normalizeDish(dish) {
+  return {
+    title: dish.description,
+    description: dish.description,
+    price: dish.price,
+    is_featured: dish.is_featured === true
+  };
+}
+
+function selectCardDishes(dishes = []) {
+  const normalized = dishes.map(normalizeDish);
+  const featured = normalized.filter(dish => dish.is_featured);
+  return (featured.length > 0 ? featured : normalized).slice(0, 2);
+}
+
 async function fetchOpeningHours(restaurantIds, dayIndex) {
   const withLunchColumns = await supabase
     .from('opening_hours')
@@ -345,7 +360,7 @@ async function getClaimedData(osmIds) {
       fetchOpeningHours(restaurantIds, dayIndex),
       supabase
         .from('menus')
-        .select('restaurant_id, description, price')
+        .select('restaurant_id, description, price, is_featured, created_at')
         .in('restaurant_id', restaurantIds)
     ]);
 
@@ -353,7 +368,7 @@ async function getClaimedData(osmIds) {
     const menusByRestaurant = new Map();
     for (const dish of menus || []) {
       const dishes = menusByRestaurant.get(dish.restaurant_id) || [];
-      dishes.push({ description: dish.description, price: dish.price });
+      dishes.push(dish);
       menusByRestaurant.set(dish.restaurant_id, dishes);
     }
 
@@ -372,7 +387,7 @@ async function getClaimedData(osmIds) {
         today_hours: null,
         today_opens: null,
         today_closes: null,
-        dishes: menusByRestaurant.get(restaurant.id) || []
+        dishes: selectCardDishes(menusByRestaurant.get(restaurant.id) || [])
       };
 
       if (todayHours) {
@@ -467,7 +482,7 @@ async function getVerifiedManualRestaurants(lat, lon, category, radiusMeters) {
         fetchOpeningHours(restaurantIds, dayIndex),
         supabase
           .from('menus')
-          .select('restaurant_id, description, price')
+          .select('restaurant_id, description, price, is_featured, created_at')
           .in('restaurant_id', restaurantIds)
       ]);
 
@@ -493,11 +508,7 @@ async function getVerifiedManualRestaurants(lat, lon, category, radiusMeters) {
     const menusByRestaurant = new Map();
     for (const dish of menus || []) {
       const dishes = menusByRestaurant.get(dish.restaurant_id) || [];
-      dishes.push({
-        title: dish.description,
-        description: dish.description,
-        price: dish.price
-      });
+      dishes.push(dish);
       menusByRestaurant.set(dish.restaurant_id, dishes);
     }
 
@@ -506,11 +517,13 @@ async function getVerifiedManualRestaurants(lat, lon, category, radiusMeters) {
         const todayHours = hoursByRestaurant.get(restaurant.id);
         const hoursStatus = getLuunchHoursStatus(todayHours, currentTime);
         const hasLuunchHours = Boolean(todayHours && hoursStatus.open_status !== 'unknown');
-        const dishes = menusByRestaurant.get(restaurant.id) || [];
+        const menuRows = menusByRestaurant.get(restaurant.id) || [];
+        const dishes = selectCardDishes(menuRows);
 
         console.log('[nearby] manual restaurant luunch data', {
           name: restaurant.name,
-          menuItems: dishes.length,
+          menuItems: menuRows.length,
+          cardMenuItems: dishes.length,
           openingHoursRows: todayHours ? 1 : 0,
           open_status: hasLuunchHours ? hoursStatus.open_status : 'unknown'
         });
