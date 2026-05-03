@@ -347,7 +347,6 @@ async function getClaimedData(osmIds) {
         .from('menus')
         .select('restaurant_id, description, price')
         .in('restaurant_id', restaurantIds)
-        .eq('date', today)
     ]);
 
     const hoursByRestaurant = new Map((hours || []).map(h => [h.restaurant_id, h]));
@@ -470,7 +469,6 @@ async function getVerifiedManualRestaurants(lat, lon, category, radiusMeters) {
           .from('menus')
           .select('restaurant_id, description, price')
           .in('restaurant_id', restaurantIds)
-          .eq('date', today)
       ]);
 
       hours = hoursData || [];
