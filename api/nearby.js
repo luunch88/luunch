@@ -344,12 +344,21 @@ async function getClaimedData(osmIds) {
   try {
     const { data: restaurants } = await supabase
       .from('restaurants')
-      .select('id, osm_id, phone, address, verified')
+      .select('id, osm_id, phone, address, claimed, verified, claimed_by_user_id, owner_user_id')
       .in('osm_id', osmIds);
 
     if (!restaurants?.length) return claimed;
 
-    const restaurantIds = restaurants.map(r => r.id);
+    const ownedRestaurants = restaurants.filter(restaurant =>
+      restaurant.claimed === true ||
+      restaurant.verified === true ||
+      restaurant.claimed_by_user_id ||
+      restaurant.owner_user_id
+    );
+
+    if (!ownedRestaurants.length) return claimed;
+
+    const restaurantIds = ownedRestaurants.map(r => r.id);
     const [hours, { data: menus }] = await Promise.all([
       fetchOpeningHours(restaurantIds, dayIndex),
       supabase
@@ -366,12 +375,12 @@ async function getClaimedData(osmIds) {
       menusByRestaurant.set(dish.restaurant_id, dishes);
     }
 
-    for (const restaurant of restaurants) {
+    for (const restaurant of ownedRestaurants) {
       const todayHours = hoursByRestaurant.get(restaurant.id);
       const hoursStatus = getLuunchHoursStatus(todayHours, currentTime);
       const claimedRestaurant = {
-        claimed: true,
-        verified: restaurant.verified,
+        claimed: restaurant.claimed === true || Boolean(restaurant.claimed_by_user_id || restaurant.owner_user_id),
+        verified: restaurant.verified === true,
         phone: restaurant.phone,
         address: restaurant.address,
         has_luunch_hours: false,
