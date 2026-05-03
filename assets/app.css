@@ -130,6 +130,9 @@ header {
 .card-menu-item:last-child { padding-bottom: 0; }
 .card-menu-text { font-size: 0.86rem; color: var(--ink); line-height: 1.35; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
 .card-menu-price { color: #15120E; background: #F2B15A; border: 1px solid rgba(255,255,255,0.1); border-radius: 99px; padding: 4px 8px; font-size: 0.72rem; font-weight: 800; white-space: nowrap; box-shadow: 0 6px 16px rgba(240,101,26,0.12); }
+.card-menu-more { width: 100%; background: transparent; color: #FF9B5A; border: 1px solid rgba(240,101,26,0.16); border-radius: 10px; padding: 8px 10px; margin-top: 6px; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 0.76rem; font-weight: 900; cursor: pointer; text-align: center; transition: background 0.15s, border-color 0.15s, transform 0.1s; }
+.card-menu-more:hover { background: rgba(240,101,26,0.08); border-color: rgba(240,101,26,0.28); }
+.card-menu-more:active { transform: scale(0.985); }
 .card-missing-wrap { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
 .card-missing { font-size: 0.78rem; color: var(--ink2); font-weight: 400; opacity: 0.82; margin-bottom: 10px; }
 .card-footer { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding-top: 10px; border-top: 1px solid rgba(242,237,228,0.07); }
