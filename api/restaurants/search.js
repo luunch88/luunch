@@ -23,6 +23,19 @@ function includesNormalized(source, needle) {
     sourceNorm.replace(/\s+/g, '').includes(needleNorm.replace(/\s+/g, ''));
 }
 
+function matchesExternalName(candidate, needle) {
+  if (!needle) return true;
+  return includesNormalized(candidate.name, needle) ||
+    includesNormalized(candidate.display_name, needle);
+}
+
+function matchesExternalCity(candidate, city) {
+  if (!city) return true;
+  if (!candidate.city && includesNormalized(candidate.display_name, 'sweden')) return true;
+  return includesNormalized(candidate.city, city) ||
+    includesNormalized(candidate.display_name, city);
+}
+
 function restaurantStatus(restaurant) {
   if (restaurant.owner_user_id || restaurant.claimed === true || restaurant.status === 'claimed') return 'claimed';
   if (restaurant.status === 'pending_claim') return 'pending_claim';
@@ -70,7 +83,11 @@ function externalName(candidate) {
 }
 
 async function fetchExternalCandidates(filters) {
-  const query = [filters.q, filters.address, filters.city, 'Sverige'].filter(Boolean).join(' ');
+  const query = [filters.q, filters.address, filters.city, 'Sweden'].filter(Boolean).join(' ');
+  return fetchNominatimQuery(query, filters);
+}
+
+async function fetchNominatimQuery(query, filters) {
   const url = new URL('https://nominatim.openstreetmap.org/search');
   url.searchParams.set('format', 'jsonv2');
   url.searchParams.set('addressdetails', '1');
@@ -91,12 +108,13 @@ async function fetchExternalCandidates(filters) {
     });
     if (!response.ok) throw new Error(`Nominatim HTTP ${response.status}`);
     const data = await response.json();
-    return (Array.isArray(data) ? data : [])
+    const mapped = (Array.isArray(data) ? data : [])
       .map(candidate => ({
         name: externalName(candidate),
         address: externalAddress(candidate),
         postal_code: candidate.address?.postcode || null,
         city: externalCity(candidate),
+        display_name: candidate.display_name || '',
         category: candidate.type || candidate.category || 'restaurant',
         source: 'osm',
         source_id: sourceIdFor(candidate),
@@ -105,8 +123,17 @@ async function fetchExternalCandidates(filters) {
         lon: candidate.lon === undefined ? null : Number(candidate.lon)
       }))
       .filter(candidate => candidate.name)
-      .filter(candidate => includesNormalized(candidate.name, filters.q))
-      .filter(candidate => includesNormalized(candidate.city, filters.city));
+      .filter(candidate => matchesExternalName(candidate, filters.q))
+      .filter(candidate => matchesExternalCity(candidate, filters.city));
+
+    console.log('[restaurants search] external candidates', {
+      query,
+      raw: Array.isArray(data) ? data.length : 0,
+      mapped: mapped.length,
+      names: mapped.map(candidate => candidate.name).slice(0, 5)
+    });
+
+    return mapped;
   } catch (error) {
     console.error('[restaurants search] external search failed', {
       message: error.name === 'AbortError' ? 'Nominatim timeout' : error.message,
@@ -116,6 +143,31 @@ async function fetchExternalCandidates(filters) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function fetchExternalCandidatesBroad(filters) {
+  const queries = [
+    [filters.q, filters.city, 'Sweden'].filter(Boolean).join(' '),
+    [filters.q, 'Kävlinge', 'Sweden'].filter(Boolean).join(' '),
+    [filters.q, 'Skåne', 'Sweden'].filter(Boolean).join(' ')
+  ];
+  const seen = new Set();
+  const all = [];
+
+  for (const query of queries) {
+    if (!query || seen.has(query)) continue;
+    seen.add(query);
+    const results = await fetchNominatimQuery(query, filters);
+    for (const result of results) {
+      const key = result.source_id || `${result.name}|${result.address}|${result.city}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      all.push(result);
+    }
+    if (all.length > 0) break;
+  }
+
+  return all;
 }
 
 async function writeRestaurantWithFallback(supabase, payload) {
@@ -245,7 +297,10 @@ export default async function handler(req, res) {
       }));
 
     if (restaurants.length === 0 && q) {
-      const externalCandidates = await fetchExternalCandidates({ q, city, address });
+      let externalCandidates = await fetchExternalCandidates({ q, city, address });
+      if (externalCandidates.length === 0) {
+        externalCandidates = await fetchExternalCandidatesBroad({ q, city, address });
+      }
       const imported = await importExternalCandidates(supabase, externalCandidates);
       restaurants = imported.map(restaurant => ({
         ...restaurant,
