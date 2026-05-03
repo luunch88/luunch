@@ -246,7 +246,8 @@ function renderRestaurantDetail(place) {
   const osmId = place.id || place.osm_id || restaurantRouteId(place);
 
   const overlay = createEl('div', 'detail-overlay');
-  const panel = createEl('article', 'detail-panel');
+  const wrapper = createEl('div', 'detail-wrapper');
+  const panel = createEl('article', 'detail-panel detail-card');
 
   const top = createEl('div', 'detail-top');
   const topBar = createEl('div', 'detail-topbar');
@@ -257,8 +258,10 @@ function renderRestaurantDetail(place) {
 
   const contact = createEl('div', 'detail-contact');
   const addressLine = [place.address, [place.postal_code, place.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
-  if (addressLine) contact.appendChild(createEl('span', 'detail-contact-item', `📍 ${addressLine}`));
-  if (place.phone) contact.appendChild(createEl('span', 'detail-contact-item', `📞 ${place.phone}`));
+  const contactParts = [];
+  if (addressLine) contactParts.push(`📍 ${addressLine}`);
+  if (place.phone) contactParts.push(`📞 ${place.phone}`);
+  if (contactParts.length > 0) contact.appendChild(createEl('span', 'detail-contact-item', contactParts.join(' · ')));
   if (contact.children.length > 0) topBar.appendChild(contact);
   top.appendChild(topBar);
 
@@ -286,7 +289,7 @@ function renderRestaurantDetail(place) {
   const hoursLabel = createEl('div', 'detail-hours-toggle-text');
   hoursLabel.appendChild(createEl('span', 'detail-section-title', 'Öppettider'));
   hoursLabel.appendChild(createEl('span', 'detail-hours-today', todayHours ? `Idag ${todayHours}` : 'Öppettider saknas'));
-  const hoursChevron = createEl('span', 'detail-hours-chevron', 'Visa hela veckan ↓');
+  const hoursChevron = createEl('span', 'detail-hours-chevron', 'Veckans öppettider ↓');
   hoursToggle.append(hoursLabel, hoursChevron);
   hoursSection.appendChild(hoursToggle);
 
@@ -302,7 +305,7 @@ function renderRestaurantDetail(place) {
     hoursToggle.addEventListener('click', () => {
       const expanded = hoursSection.classList.toggle('expanded');
       hoursToggle.setAttribute('aria-expanded', String(expanded));
-      hoursChevron.textContent = expanded ? 'Dölj veckan ↑' : 'Visa hela veckan ↓';
+      hoursChevron.textContent = expanded ? 'Dölj veckans öppettider ↑' : 'Veckans öppettider ↓';
     });
   } else {
     hoursToggle.disabled = true;
@@ -341,7 +344,8 @@ function renderRestaurantDetail(place) {
   content.appendChild(actions);
 
   panel.appendChild(content);
-  overlay.appendChild(panel);
+  wrapper.appendChild(panel);
+  overlay.appendChild(wrapper);
   overlay.addEventListener('click', event => {
     if (event.target === overlay) closeRestaurantDetail();
   });
