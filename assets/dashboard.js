@@ -152,6 +152,138 @@ function prepareApplyForm() {
   if (emailInput && currentUser?.email && !emailInput.value) {
     emailInput.value = currentUser.email;
   }
+  const claimEmail = document.getElementById('claimEmail');
+  if (claimEmail && currentUser?.email && !claimEmail.value) {
+    claimEmail.value = currentUser.email;
+  }
+}
+
+function setApplyFlow(flow) {
+  const find = document.getElementById('findRestaurantFlow');
+  const add = document.getElementById('newRestaurantFlow');
+  if (find) find.style.display = flow === 'find' ? 'block' : 'none';
+  if (add) add.style.display = flow === 'new' ? 'block' : 'none';
+}
+
+function showFindRestaurantFlow() {
+  setApplyFlow('find');
+  prepareApplyForm();
+}
+
+function showNewRestaurantFlow() {
+  setApplyFlow('new');
+  prepareApplyForm();
+}
+
+async function searchRestaurants({ name, city, address }) {
+  const params = new URLSearchParams();
+  if (name) params.set('q', name);
+  if (city) params.set('city', city);
+  if (address) params.set('address', address);
+  const res = await fetch(`/api/restaurants/search?${params.toString()}`);
+  const data = await res.json().catch(() => ({ ok: false, error: 'API:t returnerade inte JSON.' }));
+  if (!res.ok || data.ok === false) {
+    throw new Error(data.error || 'Kunde inte söka restauranger.');
+  }
+  return data.restaurants || [];
+}
+
+function renderRestaurantSearchResults(restaurants) {
+  const container = document.getElementById('restaurantSearchResults');
+  if (!container) return;
+  container.textContent = '';
+
+  if (!restaurants.length) {
+    const empty = document.createElement('div');
+    empty.className = 'dishes-empty';
+    empty.textContent = 'Ingen träff hittades.';
+    container.appendChild(empty);
+    return;
+  }
+
+  restaurants.forEach(restaurant => {
+    const card = document.createElement('div');
+    card.className = 'claim-result';
+    const title = document.createElement('div');
+    title.className = 'claim-result-title';
+    title.textContent = restaurant.name || 'Namnlös restaurang';
+    const meta = document.createElement('div');
+    meta.className = 'claim-result-meta';
+    meta.textContent = [restaurant.address, restaurant.postal_code, restaurant.city].filter(Boolean).join(', ');
+    const status = document.createElement('div');
+    status.className = 'claim-result-status';
+    status.textContent = restaurant.status === 'claimed' || restaurant.claimed === true
+      ? 'Redan kopplad till ett konto'
+      : restaurant.status === 'pending_claim'
+      ? 'Anspråk väntar redan på granskning'
+      : 'Ej claimad';
+    const button = document.createElement('button');
+    button.className = 'btn-primary';
+    button.type = 'button';
+    button.textContent = 'Detta är min restaurang';
+    button.disabled = restaurant.status === 'claimed' || restaurant.claimed === true || restaurant.status === 'pending_claim';
+    button.addEventListener('click', () => claimExistingRestaurant(restaurant.id));
+    card.append(title, meta, status, button);
+    container.appendChild(card);
+  });
+}
+
+async function searchExistingRestaurants() {
+  const name = valueOf('restaurantSearchName');
+  const city = valueOf('restaurantSearchCity');
+  const address = valueOf('restaurantSearchAddress');
+  if (!name && !city && !address) {
+    showMsg('restaurantSearchMsg', 'Skriv namn, ort eller adress.', 'error');
+    return;
+  }
+
+  try {
+    const restaurants = await searchRestaurants({ name, city, address });
+    renderRestaurantSearchResults(restaurants);
+    showMsg('restaurantSearchMsg', restaurants.length ? `${restaurants.length} träffar hittades.` : 'Ingen träff. Du kan lägga till en ny restaurang.', restaurants.length ? 'success' : 'error');
+  } catch (e) {
+    showMsg('restaurantSearchMsg', e.message, 'error');
+  }
+}
+
+async function claimExistingRestaurant(restaurantId) {
+  const payload = {
+    restaurant_id: restaurantId,
+    contact_name: valueOf('claimContactName') || currentUser?.email || '',
+    role: valueOf('claimRole'),
+    phone: valueOf('claimPhone') || null,
+    email: valueOf('claimEmail') || currentUser?.email || '',
+    org_number: valueOf('claimOrgNumber') || null,
+    message: valueOf('claimMessage') || null
+  };
+
+  if (!payload.contact_name || !payload.email) {
+    showMsg('restaurantSearchMsg', 'Ange kontaktperson och e-post innan du skickar begäran.', 'error');
+    return;
+  }
+
+  const { data: { session } } = await sb.auth.getSession();
+  try {
+    const res = await fetch('/api/restaurant-claims', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {})
+      },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json().catch(() => ({ ok: false, error: 'API:t returnerade inte JSON.' }));
+    if (!res.ok || data.ok === false) throw new Error(data.error || 'Kunde inte skicka begäran.');
+    showMsg('restaurantSearchMsg', 'Din begäran är skickad. Vi granskar den så snart som möjligt.', 'success');
+    await showPendingClaim({
+      restaurant_name: data.restaurant?.name || 'Restaurang',
+      address: data.restaurant?.address || '',
+      city: data.restaurant?.city || '',
+      status: 'pending'
+    });
+  } catch (e) {
+    showMsg('restaurantSearchMsg', e.message, 'error');
+  }
 }
 
 function validateApplyPayload(payload) {
@@ -272,6 +404,39 @@ async function getPendingClaim(userId) {
 
   if (error) return null;
   return data || null;
+}
+
+async function getPendingRestaurantClaim(userId) {
+  const { data, error } = await sb
+    .from('restaurant_claims')
+    .select('id, restaurant_id, contact_name, role, phone, email, org_number, message, status, created_at')
+    .eq('user_id', userId)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data) return null;
+
+  const { data: restaurant } = await sb
+    .from('restaurants')
+    .select('name, address, postal_code, city')
+    .eq('id', data.restaurant_id)
+    .maybeSingle();
+
+  return {
+    id: data.id,
+    restaurant_name: restaurant?.name || 'Restaurang',
+    address: restaurant?.address || '',
+    postal_code: restaurant?.postal_code || '',
+    city: restaurant?.city || '',
+    contact_person: data.contact_name,
+    email: data.email,
+    phone: data.phone,
+    organization_number: data.org_number,
+    message: data.message,
+    status: data.status
+  };
 }
 
 async function showPendingClaim(claim) {
@@ -403,6 +568,12 @@ async function loadDashboard(user) {
 
   if (!restaurant) {
     prepareApplyForm();
+    const pendingClaim = await getPendingClaim(user.id) || await getPendingRestaurantClaim(user.id);
+    if (pendingClaim) {
+      await showPendingClaim(pendingClaim);
+      return;
+    }
+    setApplyFlow(null);
     showPage('pageApply');
     return;
   }
@@ -637,6 +808,27 @@ async function applyRestaurant() {
 
   if (!validateApplyPayload(claimPayload)) {
     showMsg('applyMsg', 'Kontrollera fälten ovan.', 'error');
+    return;
+  }
+
+  try {
+    const matches = await searchRestaurants({
+      name: claimPayload.restaurant_name,
+      city: claimPayload.city,
+      address: claimPayload.address
+    });
+    if (matches.length > 0) {
+      setApplyFlow('find');
+      document.getElementById('restaurantSearchName').value = claimPayload.restaurant_name;
+      document.getElementById('restaurantSearchCity').value = claimPayload.city;
+      document.getElementById('restaurantSearchAddress').value = claimPayload.address;
+      renderRestaurantSearchResults(matches);
+      showMsg('restaurantSearchMsg', 'Denna restaurang verkar redan finnas. Vill du göra anspråk på den istället?', 'error');
+      return;
+    }
+  } catch (e) {
+    console.warn('[dashboard] duplicate restaurant check failed', e);
+    showMsg('applyMsg', 'Kunde inte kontrollera om restaurangen redan finns. Försök igen.', 'error');
     return;
   }
 
