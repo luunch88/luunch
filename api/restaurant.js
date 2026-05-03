@@ -120,7 +120,6 @@ export default async function handler(req, res) {
         .from('menus')
         .select('description, price')
         .eq('restaurant_id', restaurant.id)
-        .eq('date', today)
         .order('created_at')
     ]);
 
