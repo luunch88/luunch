@@ -28,11 +28,11 @@ function isClaimed(restaurant) {
 export default async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
-  if (!applyCors(req, res, 'POST, OPTIONS')) {
+  if (!applyCors(req, res, 'GET, POST, OPTIONS')) {
     return res.status(403).json({ ok: false, error: 'Origin not allowed' });
   }
   if (req.method === 'OPTIONS') return res.status(200).json({ ok: true });
-  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Endast POST stöds' });
+  if (!['GET', 'POST'].includes(req.method)) return res.status(405).json({ ok: false, error: 'Endast GET och POST stöds' });
 
   try {
     const supabase = getSupabaseAdmin();
@@ -46,6 +46,45 @@ export default async function handler(req, res) {
     const { data: authData, error: authError } = await supabase.auth.getUser(token);
     if (authError || !authData?.user) {
       return res.status(401).json({ ok: false, error: 'Du måste vara inloggad för att göra anspråk på restaurang' });
+    }
+
+    if (req.method === 'GET') {
+      const { data: claim, error } = await supabase
+        .from('restaurant_claims')
+        .select('id, restaurant_id, contact_name, role, phone, email, org_number, message, status, created_at')
+        .eq('user_id', authData.user.id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        const relationMissing = error.code === 'PGRST205' || String(error.message || '').includes("restaurant_claims");
+        if (relationMissing) {
+          console.warn('[restaurant claim] restaurant_claims table missing. Returning no pending claim.', {
+            message: error.message,
+            code: error.code
+          });
+          return res.status(200).json({ ok: true, claim: null });
+        }
+        return res.status(500).json({ ok: false, error: error.message });
+      }
+
+      if (!claim) return res.status(200).json({ ok: true, claim: null });
+
+      const { data: restaurant } = await supabase
+        .from('restaurants')
+        .select('name, address, postal_code, city')
+        .eq('id', claim.restaurant_id)
+        .maybeSingle();
+
+      return res.status(200).json({
+        ok: true,
+        claim: {
+          ...claim,
+          restaurant
+        }
+      });
     }
 
     const body = req.body || {};
