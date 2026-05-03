@@ -412,7 +412,7 @@ async function loadDashboard(user) {
   // Menyrätter ligger kvar tills ägaren tar bort dem.
   const { data: dishes } = await sb
     .from('menus')
-    .select('id, description, price, created_at')
+    .select('id, description, price, is_featured, created_at')
     .eq('restaurant_id', restaurant.id)
     .order('created_at');
 
@@ -475,6 +475,16 @@ function renderDishes() {
       price.textContent = `${dish.price} kr`;
       info.appendChild(price);
     }
+    const featured = document.createElement('label');
+    featured.className = 'dish-featured';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = dish.is_featured === true;
+    checkbox.addEventListener('change', () => toggleFeaturedDish(index, checkbox.checked));
+    const featuredText = document.createElement('span');
+    featuredText.textContent = 'Visa som populär rätt';
+    featured.append(checkbox, featuredText);
+    info.appendChild(featured);
     const remove = document.createElement('button');
     remove.className = 'dish-item-delete';
     remove.type = 'button';
@@ -489,6 +499,31 @@ function renderDishes() {
   renderSummary();
 }
 
+async function toggleFeaturedDish(index, isFeatured) {
+  const dish = todayDishes[index];
+  if (!dish) return;
+
+  const featuredCount = todayDishes.filter((item, itemIndex) => itemIndex !== index && item.is_featured === true).length;
+  if (isFeatured && featuredCount >= 2) {
+    showMsg('menuMsg', 'Du kan visa max 2 populära rätter på kortet.', 'error');
+    renderDishes();
+    return;
+  }
+
+  let query = sb.from('menus').update({ is_featured: isFeatured }).eq('restaurant_id', currentRestaurant.id);
+  query = dish.id ? query.eq('id', dish.id) : query.eq('description', dish.description);
+  const { error } = await query;
+  if (error) {
+    showMsg('menuMsg', 'Kunde inte uppdatera populär rätt: ' + error.message, 'error');
+    renderDishes();
+    return;
+  }
+
+  todayDishes[index].is_featured = isFeatured;
+  renderDishes();
+  showMsg('menuMsg', isFeatured ? 'Rätten visas nu som populär.' : 'Rätten visas inte längre som populär.', 'success');
+}
+
 async function addDish() {
   const desc = document.getElementById('dishDesc').value.trim();
   const price = parseInt(document.getElementById('dishPrice').value) || null;
@@ -499,12 +534,13 @@ async function addDish() {
     restaurant_id: currentRestaurant.id,
     date: today,
     description: desc,
-    price
-  }).select('id, description, price, created_at').single();
+    price,
+    is_featured: false
+  }).select('id, description, price, is_featured, created_at').single();
 
   if (error) { showMsg('menuMsg', 'Fel: ' + error.message, 'error'); return; }
 
-  todayDishes.push(data || { description: desc, price });
+  todayDishes.push(data || { description: desc, price, is_featured: false });
   document.getElementById('dishDesc').value = '';
   document.getElementById('dishPrice').value = '';
   renderDishes();
