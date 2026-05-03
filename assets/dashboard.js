@@ -10,6 +10,8 @@ let currentRestaurant = null;
 let claimInProgress = false;
 let currentUser = null;
 let currentSession = null;
+let currentDashboardSection = 'home';
+let currentHours = [];
 const RESTAURANT_TYPES = new Set([
   'Pizza',
   'Sushi',
@@ -110,6 +112,15 @@ async function submitClaimRequest(claimPayload) {
 function showPage(pageId) {
   document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
   document.getElementById(pageId).classList.add('active');
+}
+
+function showDashboardSection(section) {
+  currentDashboardSection = section;
+  document.querySelectorAll('.side-nav').forEach(button => {
+    button.classList.toggle('active', button.dataset.section === section);
+  });
+  document.querySelectorAll('.dash-section').forEach(panel => panel.classList.remove('active'));
+  document.getElementById(`dashSection${section[0].toUpperCase()}${section.slice(1)}`)?.classList.add('active');
 }
 
 function valueOf(id) {
@@ -289,6 +300,63 @@ function renderPendingDetails(claim) {
     ['Meddelande', claim.message]
   ].filter(([, value]) => value);
 
+  if (rows.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'dishes-empty';
+    empty.textContent = 'Ingen basinfo tillgänglig.';
+    container.appendChild(empty);
+    return;
+  }
+
+  rows.forEach(([label, value]) => {
+    const row = document.createElement('div');
+    row.className = 'readonly-row';
+    const labelEl = document.createElement('div');
+    labelEl.className = 'readonly-label';
+    labelEl.textContent = label;
+    const valueEl = document.createElement('div');
+    valueEl.className = 'readonly-value';
+    valueEl.textContent = value;
+    row.append(labelEl, valueEl);
+    container.appendChild(row);
+  });
+}
+
+function setText(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value;
+}
+
+function restaurantDisplayName(restaurant, user) {
+  return restaurant?.name || user?.user_metadata?.name || user?.email || 'Restaurang';
+}
+
+function renderSummary() {
+  const name = restaurantDisplayName(currentRestaurant, currentUser);
+  const isVerified = currentRestaurant?.verified === true;
+  const isClaimed = currentRestaurant?.claimed === true || Boolean(currentRestaurant?.claimed_by_user_id);
+  setText('dashName', name);
+  setText('dashSub', currentRestaurant?.address || 'Uppdatera din info nedan');
+  setText('sidebarRestaurant', currentRestaurant?.name || 'Restaurang');
+  setText('summaryRestaurantName', currentRestaurant?.name || '-');
+  setText('summaryStatus', isVerified ? 'Verifierad' : isClaimed ? 'Claimad' : 'Väntar på granskning');
+  setText('summaryMenuCount', `${todayDishes.length} rätt${todayDishes.length === 1 ? '' : 'er'}`);
+  setText('summaryHours', currentHours.length > 0 ? 'Tillagda' : 'Ej tillagda');
+}
+
+function renderSettings() {
+  const container = document.getElementById('settingsDetails');
+  if (!container) return;
+  container.textContent = '';
+  const rows = [
+    ['Namn', currentRestaurant?.name],
+    ['Adress', [currentRestaurant?.address, currentRestaurant?.postal_code, currentRestaurant?.city].filter(Boolean).join(', ')],
+    ['Kategori', currentRestaurant?.category || currentRestaurant?.type],
+    ['E-post', currentRestaurant?.email || currentRestaurant?.claim_email || currentUser?.email],
+    ['Telefon', currentRestaurant?.phone],
+    ['Hemsida', currentRestaurant?.website]
+  ].filter(([, value]) => value);
+
   rows.forEach(([label, value]) => {
     const row = document.createElement('div');
     row.className = 'readonly-row';
@@ -340,16 +408,12 @@ async function loadDashboard(user) {
   }
 
   currentRestaurant = restaurant;
-  document.getElementById('dashName').textContent = restaurant.name;
-  document.getElementById('dashSub').textContent = restaurant.address || 'Uppdatera din info nedan';
 
-  // Hämta dagens rätter
-  const today = new Date().toISOString().split('T')[0];
+  // Menyrätter ligger kvar tills ägaren tar bort dem.
   const { data: dishes } = await sb
     .from('menus')
-    .select('description, price')
+    .select('id, description, price, created_at')
     .eq('restaurant_id', restaurant.id)
-    .eq('date', today)
     .order('created_at');
 
   todayDishes = dishes || [];
@@ -362,11 +426,17 @@ async function loadDashboard(user) {
     .eq('restaurant_id', restaurant.id)
     .order('day_of_week');
 
+  currentHours = hours || [];
   buildHoursGrid(hours || []);
+  document.getElementById('hoursStatus').textContent = 'Ej tillagda';
+  document.getElementById('hoursStatus').className = 'section-status missing';
   if (hours?.length > 0) {
     document.getElementById('hoursStatus').textContent = 'Tillagda ✓';
     document.getElementById('hoursStatus').className = 'section-status set';
   }
+  renderSummary();
+  renderSettings();
+  showDashboardSection('home');
 
   // Visa dashboard
   showPage('pageDash');
@@ -377,22 +447,46 @@ let todayDishes = [];
 
 function renderDishes() {
   const list = document.getElementById('dishesList');
+  list.textContent = '';
   if (todayDishes.length === 0) {
-    list.innerHTML = `<div class="dishes-empty">Inga rätter tillagda ännu</div>`;
+    const empty = document.createElement('div');
+    empty.className = 'dishes-empty';
+    empty.textContent = 'Inga rätter tillagda ännu';
+    list.appendChild(empty);
     document.getElementById('menuStatus').textContent = 'Ej tillagd';
     document.getElementById('menuStatus').className = 'section-status missing';
+    renderSummary();
     return;
   }
-  list.innerHTML = `<div class="dish-list">${todayDishes.map((d,i) => `
-    <div class="dish-item">
-      <div class="dish-item-info">
-        <div class="dish-item-name">${escapeHtml(d.description)}</div>
-        ${d.price ? `<div class="dish-item-price">${escapeHtml(d.price)} kr</div>` : ''}
-      </div>
-      <button class="dish-item-delete" onclick="deleteDish(${i})">✕</button>
-    </div>`).join('')}</div>`;
+  const wrapper = document.createElement('div');
+  wrapper.className = 'dish-list';
+  todayDishes.forEach((dish, index) => {
+    const item = document.createElement('div');
+    item.className = 'dish-item';
+    const info = document.createElement('div');
+    info.className = 'dish-item-info';
+    const name = document.createElement('div');
+    name.className = 'dish-item-name';
+    name.textContent = dish.description;
+    info.appendChild(name);
+    if (dish.price) {
+      const price = document.createElement('div');
+      price.className = 'dish-item-price';
+      price.textContent = `${dish.price} kr`;
+      info.appendChild(price);
+    }
+    const remove = document.createElement('button');
+    remove.className = 'dish-item-delete';
+    remove.type = 'button';
+    remove.textContent = 'Ta bort';
+    remove.addEventListener('click', () => deleteDish(index));
+    item.append(info, remove);
+    wrapper.appendChild(item);
+  });
+  list.appendChild(wrapper);
   document.getElementById('menuStatus').textContent = `${todayDishes.length} rätt${todayDishes.length>1?'er':''}`;
   document.getElementById('menuStatus').className = 'section-status set';
+  renderSummary();
 }
 
 async function addDish() {
@@ -401,16 +495,16 @@ async function addDish() {
   if (!desc) { showMsg('menuMsg', 'Ange en beskrivning.', 'error'); return; }
 
   const today = new Date().toISOString().split('T')[0];
-  const { error } = await sb.from('menus').insert({
+  const { data, error } = await sb.from('menus').insert({
     restaurant_id: currentRestaurant.id,
     date: today,
     description: desc,
     price
-  });
+  }).select('id, description, price, created_at').single();
 
   if (error) { showMsg('menuMsg', 'Fel: ' + error.message, 'error'); return; }
 
-  todayDishes.push({ description: desc, price });
+  todayDishes.push(data || { description: desc, price });
   document.getElementById('dishDesc').value = '';
   document.getElementById('dishPrice').value = '';
   renderDishes();
@@ -419,14 +513,13 @@ async function addDish() {
 
 async function deleteDish(index) {
   const dish = todayDishes[index];
-  const today = new Date().toISOString().split('T')[0];
-  await sb.from('menus')
-    .delete()
-    .eq('restaurant_id', currentRestaurant.id)
-    .eq('date', today)
-    .eq('description', dish.description);
+  let query = sb.from('menus').delete().eq('restaurant_id', currentRestaurant.id);
+  query = dish.id ? query.eq('id', dish.id) : query.eq('description', dish.description);
+  const { error } = await query;
+  if (error) { showMsg('menuMsg', 'Kunde inte ta bort rätt: ' + error.message, 'error'); return; }
   todayDishes.splice(index, 1);
   renderDishes();
+  showMsg('menuMsg', 'Rätt borttagen.', 'success');
 }
 
 // -- Save hours --
@@ -452,8 +545,10 @@ async function saveHours() {
     if (error) { showMsg('hoursMsg', 'Fel: ' + error.message, 'error'); return; }
   }
 
+  currentHours = rows;
   document.getElementById('hoursStatus').textContent = 'Tillagda ✓';
   document.getElementById('hoursStatus').className = 'section-status set';
+  renderSummary();
   showMsg('hoursMsg', '✓ Öppettiderna är sparade!', 'success');
 }
 
@@ -463,6 +558,9 @@ async function logout() {
   currentRestaurant = null;
   currentUser = null;
   currentSession = null;
+  todayDishes = [];
+  currentHours = [];
+  showDashboardSection('home');
   showPage('pageLogin');
 }
 
