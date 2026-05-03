@@ -3,6 +3,7 @@
   const statusFilter = document.getElementById('statusFilter');
   const loadBtn = document.getElementById('loadBtn');
   const claimsList = document.getElementById('claimsList');
+  const restaurantClaimsList = document.getElementById('restaurantClaimsList');
   const adminMsg = document.getElementById('adminMsg');
 
   function setMsg(text, type = '') {
@@ -146,16 +147,102 @@
     });
   }
 
+  function renderRestaurantClaims(claims) {
+    restaurantClaimsList.textContent = '';
+
+    if (!claims.length) {
+      const empty = document.createElement('div');
+      empty.className = 'empty';
+      empty.textContent = 'Inga anspråk på befintliga restauranger hittades.';
+      restaurantClaimsList.appendChild(empty);
+      return;
+    }
+
+    claims.forEach(claim => {
+      const restaurant = claim.restaurant || {};
+      const card = document.createElement('article');
+      card.className = 'claim-card';
+
+      const head = document.createElement('div');
+      head.className = 'claim-head';
+      const title = document.createElement('div');
+      title.className = 'claim-title';
+      title.textContent = restaurant.name || 'Restaurang';
+      const status = document.createElement('div');
+      status.className = `status-pill ${claim.status || 'pending'}`;
+      status.textContent = claim.status || 'pending';
+      head.append(title, status);
+
+      const grid = document.createElement('div');
+      grid.className = 'claim-grid';
+      [
+        field('Restaurang', restaurant.name),
+        field('Adress', [restaurant.address, restaurant.postal_code, restaurant.city].filter(Boolean).join(', ')),
+        field('Restaurangstatus', restaurant.status),
+        field('Kontaktperson', claim.contact_name),
+        field('Roll', claim.role),
+        field('E-post', claim.email),
+        field('Telefon', claim.phone),
+        field('Organisationsnummer', claim.org_number),
+        field('Meddelande', claim.message),
+        field('User ID', claim.user_id),
+        field('Restaurant ID', claim.restaurant_id),
+        field('Skapad', claim.created_at ? new Date(claim.created_at).toLocaleString('sv-SE') : '')
+      ].filter(Boolean).forEach(el => grid.appendChild(el));
+
+      const actions = document.createElement('div');
+      actions.className = 'claim-actions simple';
+      const approve = document.createElement('button');
+      approve.className = 'btn-primary';
+      approve.type = 'button';
+      approve.textContent = 'Godkänn';
+      approve.disabled = claim.status !== 'pending';
+      approve.addEventListener('click', () => updateRestaurantClaim(claim.id, 'approved'));
+
+      const reject = document.createElement('button');
+      reject.className = 'btn-secondary';
+      reject.type = 'button';
+      reject.textContent = 'Neka';
+      reject.disabled = claim.status !== 'pending';
+      reject.addEventListener('click', () => updateRestaurantClaim(claim.id, 'rejected'));
+
+      actions.append(approve, reject);
+      card.append(head, grid, actions);
+      restaurantClaimsList.appendChild(card);
+    });
+  }
+
   async function loadClaims() {
     setMsg('Hämtar ansökningar...');
     try {
       const status = statusFilter.value;
-      const data = await api(`/api/admin/claims?status=${encodeURIComponent(status)}`);
+      const [restaurantClaims, data] = await Promise.all([
+        api(`/api/admin/restaurant-claims?status=${encodeURIComponent(status)}`),
+        api(`/api/admin/claims?status=${encodeURIComponent(status)}`)
+      ]);
+      renderRestaurantClaims(restaurantClaims.claims || []);
       renderClaims(data.claims || []);
-      setMsg(`Visar ${data.claims?.length || 0} ansökningar.`, 'success');
+      setMsg(`Visar ${(restaurantClaims.claims?.length || 0) + (data.claims?.length || 0)} ärenden.`, 'success');
     } catch (e) {
       claimsList.textContent = '';
+      restaurantClaimsList.textContent = '';
       setMsg(e.message, 'error');
+    }
+  }
+
+  async function updateRestaurantClaim(id, status) {
+    setMsg('Uppdaterar anspråk...');
+    try {
+      const data = await api('/api/admin/restaurant-claims/update', {
+        method: 'POST',
+        body: JSON.stringify({ id, status })
+      });
+      await loadClaims();
+      setMsg(data.message || 'Anspråk uppdaterat', 'success');
+    } catch (e) {
+      console.error('[admin restaurant claim update] failed:', e.result || e);
+      const apiError = e.result?.data?.error || e.message;
+      setMsg(`Kunde inte uppdatera anspråk: ${apiError}`, 'error');
     }
   }
 
