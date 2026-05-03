@@ -94,7 +94,7 @@ async function runRestaurantSearch(supabase, filters, columns) {
 
   if (filters.q) query = query.ilike('name', `%${filters.q}%`);
   if (filters.city) query = query.ilike('city', `%${filters.city}%`);
-  if (filters.address) query = query.ilike('address', `%${filters.address}%`);
+  if (filters.address && !filters.refreshExternal) query = query.ilike('address', `%${filters.address}%`);
 
   return query;
 }
@@ -181,7 +181,7 @@ async function fetchSnapshotCandidates(supabase, filters) {
         const candidate = nearbyRestaurantToCandidate(restaurant);
         if (!candidate.name || !matchesExternalName(candidate, filters.q)) continue;
         if (filters.city && candidate.city && !matchesExternalCity(candidate, filters.city)) continue;
-        if (filters.address && candidate.address && !includesNormalized(candidate.address, filters.address)) continue;
+        if (filters.address && !filters.refreshExternal && candidate.address && !includesNormalized(candidate.address, filters.address)) continue;
 
         const key = candidate.source_id || `${candidate.name}|${candidate.address}|${candidate.city}`;
         if (seen.has(key)) continue;
@@ -456,7 +456,7 @@ async function fetchOverpassCityCandidates(filters) {
           .filter(candidate => candidate.name)
           .filter(candidate => matchesExternalCity(candidate, filters.city))
           .filter(candidate => !filters.q || matchesExternalName(candidate, filters.q))
-          .filter(candidate => !filters.address || includesNormalized(candidate.address, filters.address));
+        .filter(candidate => !filters.address || !candidate.address || includesNormalized(candidate.address, filters.address));
 
         console.log('[restaurants search] overpass city candidates', {
           endpoint,
@@ -617,6 +617,7 @@ export default async function handler(req, res) {
     const city = clean(req.query?.city);
     const address = clean(req.query?.address);
     const debug = String(req.query?.debug || '') === '1';
+    const refreshExternal = String(req.query?.refresh_external || '') === '1';
     const debugInfo = {
       supabaseRows: 0,
       snapshotCandidates: 0,
@@ -632,13 +633,13 @@ export default async function handler(req, res) {
     }
 
     let columns = ['id', 'name', 'address', 'postal_code', 'city', 'category', 'status', 'owner_user_id', 'claimed', 'verified'];
-    let { data, error } = await runRestaurantSearch(supabase, { q, city, address }, columns);
+    let { data, error } = await runRestaurantSearch(supabase, { q, city, address, refreshExternal }, columns);
     for (let attempt = 0; error && attempt < 4; attempt += 1) {
       const column = missingColumn(error);
       if (error.code !== 'PGRST204' || !column || !columns.includes(column)) break;
       columns = columns.filter(item => item !== column);
       console.warn('[restaurants search] retrying without missing column', { column, columns });
-      ({ data, error } = await runRestaurantSearch(supabase, { q, city, address }, columns));
+      ({ data, error } = await runRestaurantSearch(supabase, { q, city, address, refreshExternal }, columns));
     }
 
     if (error) {
@@ -656,28 +657,28 @@ export default async function handler(req, res) {
     let restaurants = (data || [])
       .filter(restaurant => includesNormalized(restaurant.name, q))
       .filter(restaurant => includesNormalized(restaurant.city, city))
-      .filter(restaurant => includesNormalized(restaurant.address, address))
+      .filter(restaurant => !address || refreshExternal || includesNormalized(restaurant.address, address))
       .map(restaurant => ({
         ...restaurant,
         status: restaurantStatus(restaurant)
       }));
 
-    if (q || city) {
+    if (q || city || refreshExternal) {
       let externalCandidates = await fetchSnapshotCandidates(supabase, { q, city, address });
       debugInfo.snapshotCandidates = externalCandidates.length;
-      if (externalCandidates.length === 0 && restaurants.length === 0) {
+      if (externalCandidates.length === 0 && (restaurants.length === 0 || refreshExternal)) {
         externalCandidates = q
           ? await fetchExternalCandidates({ q, city, address })
           : [];
         debugInfo.nominatimCandidates = externalCandidates.length;
       }
-      if (externalCandidates.length === 0 && restaurants.length === 0) {
+      if (externalCandidates.length === 0 && (restaurants.length === 0 || refreshExternal)) {
         externalCandidates = q
           ? await fetchExternalCandidatesBroad({ q, city, address })
           : [];
         debugInfo.broadCandidates = externalCandidates.length;
       }
-      if (externalCandidates.length === 0 && q && restaurants.length === 0) {
+      if (externalCandidates.length === 0 && q && (restaurants.length === 0 || refreshExternal)) {
         externalCandidates = q
           ? await fetchOverpassCandidates({ q, city, address })
           : [];
