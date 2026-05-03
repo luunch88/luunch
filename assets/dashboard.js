@@ -152,27 +152,6 @@ function prepareApplyForm() {
   if (emailInput && currentUser?.email && !emailInput.value) {
     emailInput.value = currentUser.email;
   }
-  const claimEmail = document.getElementById('claimEmail');
-  if (claimEmail && currentUser?.email && !claimEmail.value) {
-    claimEmail.value = currentUser.email;
-  }
-}
-
-function setApplyFlow(flow) {
-  const find = document.getElementById('findRestaurantFlow');
-  const add = document.getElementById('newRestaurantFlow');
-  if (find) find.style.display = flow === 'find' ? 'block' : 'none';
-  if (add) add.style.display = flow === 'new' ? 'block' : 'none';
-}
-
-function showFindRestaurantFlow() {
-  setApplyFlow('find');
-  prepareApplyForm();
-}
-
-function showNewRestaurantFlow() {
-  setApplyFlow('new');
-  prepareApplyForm();
 }
 
 async function searchRestaurants({ name, city, address }) {
@@ -570,7 +549,6 @@ async function loadDashboard(user) {
       await showPendingClaim(pendingClaim);
       return;
     }
-    setApplyFlow(null);
     showPage('pageApply');
     return;
   }
@@ -805,27 +783,6 @@ async function applyRestaurant() {
 
   if (!validateApplyPayload(claimPayload)) {
     showMsg('applyMsg', 'Kontrollera fälten ovan.', 'error');
-    return;
-  }
-
-  try {
-    const matches = await searchRestaurants({
-      name: claimPayload.restaurant_name,
-      city: claimPayload.city,
-      address: claimPayload.address
-    });
-    if (matches.length > 0) {
-      setApplyFlow('find');
-      document.getElementById('restaurantSearchName').value = claimPayload.restaurant_name;
-      document.getElementById('restaurantSearchCity').value = claimPayload.city;
-      document.getElementById('restaurantSearchAddress').value = claimPayload.address;
-      renderRestaurantSearchResults(matches);
-      showMsg('restaurantSearchMsg', 'Denna restaurang verkar redan finnas. Vill du göra anspråk på den istället?', 'error');
-      return;
-    }
-  } catch (e) {
-    console.warn('[dashboard] duplicate restaurant check failed', e);
-    showMsg('applyMsg', 'Kunde inte kontrollera om restaurangen redan finns. Försök igen.', 'error');
     return;
   }
 
