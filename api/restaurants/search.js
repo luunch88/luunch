@@ -117,6 +117,76 @@ async function fetchExternalCandidates(filters) {
   return fetchNominatimQuery(query, filters);
 }
 
+function nearbyRestaurantToCandidate(restaurant) {
+  const sourceId = restaurant.osm_id || restaurant.id || restaurant.source_id || null;
+  return {
+    name: restaurant.name || '',
+    address: restaurant.address || '',
+    postal_code: restaurant.postal_code || null,
+    city: restaurant.city || '',
+    display_name: [restaurant.name, restaurant.address, restaurant.city].filter(Boolean).join(', '),
+    category: restaurant.category || restaurant.type_label || 'restaurant',
+    source: restaurant.source || 'osm',
+    source_id: sourceId,
+    osm_id: sourceId,
+    lat: restaurant.lat === undefined || restaurant.lat === null ? null : Number(restaurant.lat),
+    lon: restaurant.lon === undefined || restaurant.lon === null ? null : Number(restaurant.lon)
+  };
+}
+
+async function fetchSnapshotCandidates(supabase, filters) {
+  try {
+    const { data, error } = await supabase
+      .from('place_snapshots')
+      .select('payload_json, updated_at, created_at')
+      .order('updated_at', { ascending: false })
+      .limit(30);
+
+    if (error) {
+      console.warn('[restaurants search] snapshot search skipped', {
+        message: error.message,
+        code: error.code
+      });
+      return [];
+    }
+
+    const seen = new Set();
+    const candidates = [];
+    for (const snapshot of data || []) {
+      const restaurants = Array.isArray(snapshot.payload_json?.restaurants)
+        ? snapshot.payload_json.restaurants
+        : [];
+
+      for (const restaurant of restaurants) {
+        const candidate = nearbyRestaurantToCandidate(restaurant);
+        if (!candidate.name || !matchesExternalName(candidate, filters.q)) continue;
+        if (filters.city && candidate.city && !matchesExternalCity(candidate, filters.city)) continue;
+        if (filters.address && candidate.address && !includesNormalized(candidate.address, filters.address)) continue;
+
+        const key = candidate.source_id || `${candidate.name}|${candidate.address}|${candidate.city}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        candidates.push(candidate);
+      }
+    }
+
+    console.log('[restaurants search] snapshot candidates', {
+      query: filters.q,
+      city: filters.city,
+      count: candidates.length,
+      names: candidates.map(candidate => candidate.name).slice(0, 5)
+    });
+
+    return candidates;
+  } catch (error) {
+    console.error('[restaurants search] snapshot search failed', {
+      message: error.message,
+      filters
+    });
+    return [];
+  }
+}
+
 async function fetchNominatimQuery(query, filters) {
   const url = new URL('https://nominatim.openstreetmap.org/search');
   url.searchParams.set('format', 'jsonv2');
@@ -442,7 +512,10 @@ export default async function handler(req, res) {
       }));
 
     if (restaurants.length === 0 && q) {
-      let externalCandidates = await fetchExternalCandidates({ q, city, address });
+      let externalCandidates = await fetchSnapshotCandidates(supabase, { q, city, address });
+      if (externalCandidates.length === 0) {
+        externalCandidates = await fetchExternalCandidates({ q, city, address });
+      }
       if (externalCandidates.length === 0) {
         externalCandidates = await fetchExternalCandidatesBroad({ q, city, address });
       }
