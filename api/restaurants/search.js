@@ -49,6 +49,7 @@ function matchesExternalName(candidate, needle) {
 
 function matchesExternalCity(candidate, city) {
   if (!city) return true;
+  if (normalize(candidate.city) === normalize(city)) return true;
   if (!candidate.city && includesNormalized(candidate.display_name, 'sweden')) return true;
   return includesNormalized(candidate.city, city) ||
     includesNormalized(candidate.display_name, city);
@@ -387,76 +388,78 @@ async function fetchOverpassCandidates(filters) {
 
 async function fetchOverpassCityCandidates(filters) {
   const center = await geocodeCity(filters.city);
-  if (!center) {
-    console.warn('[restaurants search] city restaurant fallback skipped, city geocode failed', {
-      city: filters.city
-    });
-    return [];
-  }
-
-  const query = `[out:json][timeout:20];(node["amenity"~"restaurant|cafe|fast_food|bar|bakery|pub"](around:8000,${center.lat},${center.lon});way["amenity"~"restaurant|cafe|fast_food|bar|bakery|pub"](around:8000,${center.lat},${center.lon}););out center tags;`;
+  const cityRegex = escapeRegex(clean(filters.city));
+  const areaQuery = `[out:json][timeout:20];area["name"~"^${cityRegex}",i]["boundary"="administrative"]->.cityArea;(node(area.cityArea)["amenity"~"restaurant|cafe|fast_food|bar|bakery|pub"];way(area.cityArea)["amenity"~"restaurant|cafe|fast_food|bar|bakery|pub"];);out center tags;`;
+  const aroundQuery = center
+    ? `[out:json][timeout:20];(node["amenity"~"restaurant|cafe|fast_food|bar|bakery|pub"](around:8000,${center.lat},${center.lon});way["amenity"~"restaurant|cafe|fast_food|bar|bakery|pub"](around:8000,${center.lat},${center.lon}););out center tags;`
+    : null;
   const errors = [];
 
   for (const endpoint of OVERPASS_ENDPOINTS) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), OVERPASS_TIMEOUT_MS);
-    try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
-          'User-Agent': 'luunch.se/1.0 contact@luunch.se'
-        },
-        body: 'data=' + encodeURIComponent(query),
-        signal: controller.signal
-      });
+    for (const [queryType, query] of [['area', areaQuery], ['around', aroundQuery]].filter(([, value]) => value)) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), OVERPASS_TIMEOUT_MS);
+      try {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+            'User-Agent': 'luunch.se/1.0 contact@luunch.se'
+          },
+          body: 'data=' + encodeURIComponent(query),
+          signal: controller.signal
+        });
 
-      if (!response.ok) throw new Error(`Overpass HTTP ${response.status}`);
-      const data = await response.json();
-      const candidates = (data.elements || [])
-        .map(element => {
-          const tags = element.tags || {};
-          const lat = element.lat || element.center?.lat;
-          const lon = element.lon || element.center?.lon;
-          return {
-            name: tags.name || '',
-            address: overpassAddress(tags),
-            postal_code: tags['addr:postcode'] || null,
-            city: overpassCity(tags, filters.city),
-            display_name: [tags.name, overpassAddress(tags), overpassCity(tags, filters.city)].filter(Boolean).join(', '),
-            category: tags.cuisine || tags.amenity || 'restaurant',
-            source: 'osm',
-            source_id: overpassSourceId(element),
-            osm_id: overpassSourceId(element),
-            lat: lat === undefined ? null : Number(lat),
-            lon: lon === undefined ? null : Number(lon)
-          };
-        })
-        .filter(candidate => candidate.name)
-        .filter(candidate => matchesExternalCity(candidate, filters.city))
-        .filter(candidate => !filters.q || matchesExternalName(candidate, filters.q))
-        .filter(candidate => !filters.address || includesNormalized(candidate.address, filters.address));
+        if (!response.ok) throw new Error(`Overpass HTTP ${response.status}`);
+        const data = await response.json();
+        const candidates = (data.elements || [])
+          .map(element => {
+            const tags = element.tags || {};
+            const lat = element.lat || element.center?.lat;
+            const lon = element.lon || element.center?.lon;
+            return {
+              name: tags.name || '',
+              address: overpassAddress(tags),
+              postal_code: tags['addr:postcode'] || null,
+              city: overpassCity(tags, filters.city),
+              display_name: [tags.name, overpassAddress(tags), overpassCity(tags, filters.city)].filter(Boolean).join(', '),
+              category: tags.cuisine || tags.amenity || 'restaurant',
+              source: 'osm',
+              source_id: overpassSourceId(element),
+              osm_id: overpassSourceId(element),
+              lat: lat === undefined ? null : Number(lat),
+              lon: lon === undefined ? null : Number(lon)
+            };
+          })
+          .filter(candidate => candidate.name)
+          .filter(candidate => matchesExternalCity(candidate, filters.city))
+          .filter(candidate => !filters.q || matchesExternalName(candidate, filters.q))
+          .filter(candidate => !filters.address || includesNormalized(candidate.address, filters.address));
 
-      console.log('[restaurants search] overpass city candidates', {
-        endpoint,
-        city: filters.city,
-        query: filters.q,
-        count: candidates.length,
-        names: candidates.map(candidate => candidate.name).slice(0, 12)
-      });
+        console.log('[restaurants search] overpass city candidates', {
+          endpoint,
+          queryType,
+          city: filters.city,
+          query: filters.q,
+          raw: data.elements?.length || 0,
+          count: candidates.length,
+          names: candidates.map(candidate => candidate.name).slice(0, 12)
+        });
 
-      return candidates;
-    } catch (error) {
-      const message = error.name === 'AbortError' ? 'Overpass timeout' : error.message;
-      errors.push(message);
-      console.error('[restaurants search] overpass city fallback failed', {
-        endpoint,
-        message,
-        filters
-      });
-    } finally {
-      clearTimeout(timeout);
+        if (candidates.length > 0) return candidates;
+      } catch (error) {
+        const message = error.name === 'AbortError' ? 'Overpass timeout' : error.message;
+        errors.push(`${queryType}: ${message}`);
+        console.error('[restaurants search] overpass city fallback failed', {
+          endpoint,
+          queryType,
+          message,
+          filters
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
     }
   }
 
