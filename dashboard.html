@@ -54,10 +54,52 @@
 <div class="page" id="pageApply">
   <div class="dash-greeting">
     <h2>Ansök om din restaurang</h2>
-    <p>Hitta din restaurang i Luunch och koppla den till ditt konto.</p>
+    <p>Börja med att söka efter restaurangen. Finns den redan kan du göra anspråk på den.</p>
   </div>
 
-  <div class="section-card">
+  <div class="section-card" id="onboardingChoice">
+    <div class="section-card-header">
+      <div class="section-card-title">Kom igång</div>
+      <div class="section-status missing">Välj</div>
+    </div>
+    <div class="quick-actions">
+      <button class="btn-primary" type="button" onclick="showFindRestaurantFlow()">Hitta min restaurang</button>
+      <button class="btn-secondary" type="button" onclick="showNewRestaurantFlow()">Lägg till ny restaurang</button>
+    </div>
+  </div>
+
+  <div class="section-card" id="findRestaurantFlow" style="display:none">
+    <div class="section-card-header">
+      <div class="section-card-title">Sök restaurang</div>
+      <div class="section-status missing">Befintlig</div>
+    </div>
+    <label class="form-label">Restaurangnamn</label>
+    <input class="form-input" id="restaurantSearchName" type="text" placeholder="T.ex. Viking Pizzeria">
+    <label class="form-label">Ort</label>
+    <input class="form-input" id="restaurantSearchCity" type="text" placeholder="T.ex. Kävlinge">
+    <label class="form-label">Adress (valfri)</label>
+    <input class="form-input" id="restaurantSearchAddress" type="text" placeholder="Gata och nummer">
+    <button class="btn-primary" type="button" onclick="searchExistingRestaurants()">Sök restaurang</button>
+    <div id="restaurantSearchMsg"></div>
+    <div class="claim-results" id="restaurantSearchResults"></div>
+
+    <div class="divider"></div>
+    <label class="form-label">Kontaktperson</label>
+    <input class="form-input" id="claimContactName" type="text" placeholder="För- och efternamn">
+    <label class="form-label">Roll</label>
+    <input class="form-input" id="claimRole" type="text" placeholder="T.ex. ägare, platschef">
+    <label class="form-label">E-post</label>
+    <input class="form-input" id="claimEmail" type="email" placeholder="din@restaurang.se">
+    <label class="form-label">Telefon (valfri)</label>
+    <input class="form-input" id="claimPhone" type="tel" placeholder="Valfritt">
+    <label class="form-label">Organisationsnummer (valfri)</label>
+    <input class="form-input" id="claimOrgNumber" type="text" inputmode="numeric" placeholder="556123-4567">
+    <label class="form-label">Meddelande (valfri)</label>
+    <textarea class="form-input form-textarea" id="claimMessage" placeholder="Berätta kort varför detta är din restaurang"></textarea>
+    <button class="btn-secondary" type="button" onclick="showNewRestaurantFlow()">Ingen träff? Lägg till ny restaurang</button>
+  </div>
+
+  <div class="section-card" id="newRestaurantFlow" style="display:none">
     <div class="section-card-header">
       <div class="section-card-title">🏪 Restaurang</div>
       <div class="section-status missing">Ej ansökt</div>
