@@ -407,29 +407,26 @@ async function getPendingClaim(userId) {
 }
 
 async function getPendingRestaurantClaim(userId) {
-  const { data, error } = await sb
-    .from('restaurant_claims')
-    .select('id, restaurant_id, contact_name, role, phone, email, org_number, message, status, created_at')
-    .eq('user_id', userId)
-    .eq('status', 'pending')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session?.access_token) return null;
 
-  if (error || !data) return null;
+  const res = await fetch('/api/restaurant-claims', {
+    headers: {
+      Authorization: `Bearer ${session.access_token}`
+    }
+  });
+  const payload = await res.json().catch(() => ({ ok: false }));
+  if (!res.ok || payload.ok === false || !payload.claim) return null;
 
-  const { data: restaurant } = await sb
-    .from('restaurants')
-    .select('name, address, postal_code, city')
-    .eq('id', data.restaurant_id)
-    .maybeSingle();
+  const data = payload.claim;
+  const restaurant = data.restaurant || {};
 
   return {
     id: data.id,
-    restaurant_name: restaurant?.name || 'Restaurang',
-    address: restaurant?.address || '',
-    postal_code: restaurant?.postal_code || '',
-    city: restaurant?.city || '',
+    restaurant_name: restaurant.name || 'Restaurang',
+    address: restaurant.address || '',
+    postal_code: restaurant.postal_code || '',
+    city: restaurant.city || '',
     contact_person: data.contact_name,
     email: data.email,
     phone: data.phone,
