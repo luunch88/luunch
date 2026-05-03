@@ -37,8 +37,8 @@ function isWithinTimeRange(opens, closes, currentTime) {
 
 function getHoursStatus(hours, currentTime) {
   if (!hours) return { today_hours: null, is_open_now: null, open_status: 'unknown' };
-  const opens = hours.lunch_opens || hours.opens;
-  const closes = hours.lunch_closes || hours.closes;
+  const opens = hours.opens;
+  const closes = hours.closes;
   const isOpen = isWithinTimeRange(opens, closes, currentTime);
   if (isOpen === null) return { today_hours: null, is_open_now: null, open_status: 'unknown' };
   return {
@@ -49,25 +49,19 @@ function getHoursStatus(hours, currentTime) {
 }
 
 async function fetchOpeningHours(restaurantId) {
-  const withLunchColumns = await supabase
-    .from('opening_hours')
-    .select('day_of_week, opens, closes, lunch_opens, lunch_closes')
-    .eq('restaurant_id', restaurantId)
-    .order('day_of_week');
-
-  if (!withLunchColumns.error) return withLunchColumns.data || [];
-
-  console.warn('[restaurant] opening_hours lunch columns missing, using fallback', {
-    message: withLunchColumns.error.message
-  });
-
-  const fallback = await supabase
+  const result = await supabase
     .from('opening_hours')
     .select('day_of_week, opens, closes')
     .eq('restaurant_id', restaurantId)
     .order('day_of_week');
 
-  return fallback.data || [];
+  if (result.error) {
+    console.warn('[restaurant] opening_hours lookup failed', {
+      message: result.error.message
+    });
+  }
+
+  return result.data || [];
 }
 
 function normalizeId(value) {
@@ -164,8 +158,8 @@ export default async function handler(req, res) {
         has_luunch_hours: hasLuunchHours,
         opening_hours_source: hasLuunchHours ? 'luunch' : null,
         today_hours: hasLuunchHours ? hoursStatus.today_hours : null,
-        today_opens: hasLuunchHours ? todayHours?.lunch_opens || todayHours?.opens || null : null,
-        today_closes: hasLuunchHours ? todayHours?.lunch_closes || todayHours?.closes || null : null,
+        today_opens: hasLuunchHours ? todayHours?.opens || null : null,
+        today_closes: hasLuunchHours ? todayHours?.closes || null : null,
         is_open_now: hasLuunchHours ? hoursStatus.is_open_now : null,
         open_status: hasLuunchHours ? hoursStatus.open_status : 'unknown',
         week_hours: openingHours
