@@ -385,6 +385,88 @@ async function fetchOverpassCandidates(filters) {
   return [];
 }
 
+async function fetchOverpassCityCandidates(filters) {
+  const center = await geocodeCity(filters.city);
+  if (!center) {
+    console.warn('[restaurants search] city restaurant fallback skipped, city geocode failed', {
+      city: filters.city
+    });
+    return [];
+  }
+
+  const query = `[out:json][timeout:20];(node["amenity"~"restaurant|cafe|fast_food|bar|bakery|pub"](around:8000,${center.lat},${center.lon});way["amenity"~"restaurant|cafe|fast_food|bar|bakery|pub"](around:8000,${center.lat},${center.lon}););out center tags;`;
+  const errors = [];
+
+  for (const endpoint of OVERPASS_ENDPOINTS) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), OVERPASS_TIMEOUT_MS);
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+          'User-Agent': 'luunch.se/1.0 contact@luunch.se'
+        },
+        body: 'data=' + encodeURIComponent(query),
+        signal: controller.signal
+      });
+
+      if (!response.ok) throw new Error(`Overpass HTTP ${response.status}`);
+      const data = await response.json();
+      const candidates = (data.elements || [])
+        .map(element => {
+          const tags = element.tags || {};
+          const lat = element.lat || element.center?.lat;
+          const lon = element.lon || element.center?.lon;
+          return {
+            name: tags.name || '',
+            address: overpassAddress(tags),
+            postal_code: tags['addr:postcode'] || null,
+            city: overpassCity(tags, filters.city),
+            display_name: [tags.name, overpassAddress(tags), overpassCity(tags, filters.city)].filter(Boolean).join(', '),
+            category: tags.cuisine || tags.amenity || 'restaurant',
+            source: 'osm',
+            source_id: overpassSourceId(element),
+            osm_id: overpassSourceId(element),
+            lat: lat === undefined ? null : Number(lat),
+            lon: lon === undefined ? null : Number(lon)
+          };
+        })
+        .filter(candidate => candidate.name)
+        .filter(candidate => matchesExternalCity(candidate, filters.city))
+        .filter(candidate => !filters.q || matchesExternalName(candidate, filters.q))
+        .filter(candidate => !filters.address || includesNormalized(candidate.address, filters.address));
+
+      console.log('[restaurants search] overpass city candidates', {
+        endpoint,
+        city: filters.city,
+        query: filters.q,
+        count: candidates.length,
+        names: candidates.map(candidate => candidate.name).slice(0, 12)
+      });
+
+      return candidates;
+    } catch (error) {
+      const message = error.name === 'AbortError' ? 'Overpass timeout' : error.message;
+      errors.push(message);
+      console.error('[restaurants search] overpass city fallback failed', {
+        endpoint,
+        message,
+        filters
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  console.error('[restaurants search] all overpass city fallback endpoints failed', {
+    errors,
+    filters
+  });
+  return [];
+}
+
 async function writeRestaurantWithFallback(supabase, payload) {
   let nextPayload = { ...payload };
 
@@ -511,16 +593,25 @@ export default async function handler(req, res) {
         status: restaurantStatus(restaurant)
       }));
 
-    if (restaurants.length === 0 && q) {
+    if (restaurants.length === 0 && (q || city)) {
       let externalCandidates = await fetchSnapshotCandidates(supabase, { q, city, address });
       if (externalCandidates.length === 0) {
-        externalCandidates = await fetchExternalCandidates({ q, city, address });
+        externalCandidates = q
+          ? await fetchExternalCandidates({ q, city, address })
+          : [];
       }
       if (externalCandidates.length === 0) {
-        externalCandidates = await fetchExternalCandidatesBroad({ q, city, address });
+        externalCandidates = q
+          ? await fetchExternalCandidatesBroad({ q, city, address })
+          : [];
       }
       if (externalCandidates.length === 0) {
-        externalCandidates = await fetchOverpassCandidates({ q, city, address });
+        externalCandidates = q
+          ? await fetchOverpassCandidates({ q, city, address })
+          : [];
+      }
+      if (externalCandidates.length === 0 && city) {
+        externalCandidates = await fetchOverpassCityCandidates({ q, city, address });
       }
       const imported = await importExternalCandidates(supabase, externalCandidates);
       restaurants = imported.map(restaurant => ({
