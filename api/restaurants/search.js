@@ -72,6 +72,15 @@ function slugify(value) {
     .slice(0, 80) || 'restaurang';
 }
 
+function placeholderEmailFor(candidate) {
+  const source = String(candidate.source_id || candidate.osm_id || candidate.name || 'restaurant')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 80);
+  return `osm-${source || 'restaurant'}@luunch.local`;
+}
+
 function missingColumn(error) {
   const text = [error?.message, error?.details, error?.hint].filter(Boolean).join(' ');
   return text.match(/'([^']+)' column/)?.[1] || null;
@@ -549,7 +558,7 @@ async function importExternalCandidates(supabase, candidates) {
       osm_id: candidate.osm_id,
       lat: candidate.lat,
       lon: candidate.lon,
-      email: '',
+      email: placeholderEmailFor(candidate),
       claim_email: null,
       phone: null,
       website: null,
