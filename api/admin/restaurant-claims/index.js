@@ -3,6 +3,32 @@ import { getSupabaseAdmin, requireAdminSecret } from '../_admin.js';
 
 const VALID_STATUSES = new Set(['pending', 'approved', 'rejected']);
 
+function missingColumn(error) {
+  const text = [error?.message, error?.details, error?.hint].filter(Boolean).join(' ');
+  return text.match(/'([^']+)' column/)?.[1] || null;
+}
+
+async function fetchRestaurants(supabase, restaurantIds) {
+  let columns = ['id', 'name', 'address', 'postal_code', 'city', 'category', 'status', 'owner_user_id', 'claimed', 'verified'];
+  let result = await supabase
+    .from('restaurants')
+    .select(columns.join(', '))
+    .in('id', restaurantIds);
+
+  for (let attempt = 0; result.error && attempt < 4; attempt += 1) {
+    const column = missingColumn(result.error);
+    if (result.error.code !== 'PGRST204' || !column || !columns.includes(column)) break;
+    columns = columns.filter(item => item !== column);
+    console.warn('[admin restaurant claims] retrying restaurant lookup without missing column', { column });
+    result = await supabase
+      .from('restaurants')
+      .select(columns.join(', '))
+      .in('id', restaurantIds);
+  }
+
+  return result;
+}
+
 export default async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
@@ -41,10 +67,7 @@ export default async function handler(req, res) {
     const restaurantIds = [...new Set((claims || []).map(claim => claim.restaurant_id).filter(Boolean))];
     let restaurantsById = new Map();
     if (restaurantIds.length) {
-      const { data: restaurants, error: restaurantsError } = await supabase
-        .from('restaurants')
-        .select('id, name, address, postal_code, city, category, status, owner_user_id, claimed, verified')
-        .in('id', restaurantIds);
+      const { data: restaurants, error: restaurantsError } = await fetchRestaurants(supabase, restaurantIds);
 
       if (restaurantsError) {
         console.error('[admin restaurant claims] restaurant lookup failed', {
