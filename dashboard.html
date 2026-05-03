@@ -135,41 +135,100 @@
 
 <!-- DASHBOARD PAGE -->
 <div class="page" id="pageDash">
-  <div class="dash-greeting">
-    <h2>Hej, <span id="dashName">Restaurang</span> 👋</h2>
-    <p id="dashSub">Håll din sida uppdaterad så hittar fler gäster dig.</p>
-  </div>
+  <div class="dashboard-shell">
+    <aside class="dashboard-sidebar">
+      <div class="sidebar-restaurant" id="sidebarRestaurant">Restaurang</div>
+      <button class="side-nav active" type="button" data-section="home" onclick="showDashboardSection('home')">Startsida</button>
+      <button class="side-nav" type="button" data-section="menu" onclick="showDashboardSection('menu')">Meny</button>
+      <button class="side-nav" type="button" data-section="hours" onclick="showDashboardSection('hours')">Öppettider</button>
+      <button class="side-nav" type="button" data-section="deals" onclick="showDashboardSection('deals')">Deals</button>
+      <button class="side-nav" type="button" data-section="settings" onclick="showDashboardSection('settings')">Inställningar</button>
+      <button class="btn-logout sidebar-logout" onclick="logout()">Logga ut</button>
+    </aside>
 
-  <!-- TODAY'S MENU -->
-  <div class="section-card">
-    <div class="section-card-header">
-      <div class="section-card-title">🍽️ Dagens meny</div>
-      <div class="section-status missing" id="menuStatus">Ej tillagd</div>
-    </div>
-    <div id="dishesList"></div>
-    <div class="dish-form" id="dishForm">
-      <label class="form-label">Maträtt</label>
-      <input class="form-input" id="dishDesc" type="text" placeholder="T.ex. Köttbullar med potatismos och lingon">
-      <label class="form-label">Pris (kr)</label>
-      <input class="form-input" id="dishPrice" type="number" placeholder="125">
-      <button class="btn-primary" onclick="addDish()">+ Lägg till rätt</button>
-    </div>
-    <div id="menuMsg"></div>
-  </div>
+    <main class="dashboard-main">
+      <section class="dash-section active" id="dashSectionHome">
+        <div class="dash-greeting">
+          <h2>Välkommen tillbaka <span id="dashName">Restaurang</span>!</h2>
+          <p id="dashSub">Håll din sida uppdaterad så hittar fler gäster dig.</p>
+        </div>
 
-  <!-- OPENING HOURS -->
-  <div class="section-card">
-    <div class="section-card-header">
-      <div class="section-card-title">🕐 Öppettider</div>
-      <div class="section-status missing" id="hoursStatus">Ej tillagda</div>
-    </div>
-    <div class="hours-grid" id="hoursGrid"></div>
-    <button class="btn-primary" onclick="saveHours()">Spara öppettider</button>
-    <div id="hoursMsg"></div>
-  </div>
+        <div class="summary-grid">
+          <div class="summary-card">
+            <div class="summary-label">Restaurang</div>
+            <div class="summary-value" id="summaryRestaurantName">-</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-label">Status</div>
+            <div class="summary-value" id="summaryStatus">-</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-label">Meny</div>
+            <div class="summary-value" id="summaryMenuCount">0 rätter</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-label">Öppettider</div>
+            <div class="summary-value" id="summaryHours">Ej tillagda</div>
+          </div>
+        </div>
 
-  <div class="divider"></div>
-  <button class="btn-logout" onclick="logout()">Logga ut</button>
+        <div class="quick-actions">
+          <button class="btn-primary" type="button" onclick="showDashboardSection('menu')">Lägg till meny</button>
+          <button class="btn-secondary" type="button" onclick="showDashboardSection('hours')">Uppdatera öppettider</button>
+        </div>
+      </section>
+
+      <section class="dash-section" id="dashSectionMenu">
+        <div class="section-card">
+          <div class="section-card-header">
+            <div class="section-card-title">Dagens meny</div>
+            <div class="section-status missing" id="menuStatus">Ej tillagd</div>
+          </div>
+          <p class="form-hint">Rätter ligger kvar tills du tar bort dem.</p>
+          <div id="dishesList"></div>
+          <div class="dish-form" id="dishForm">
+            <label class="form-label">Maträtt</label>
+            <input class="form-input" id="dishDesc" type="text" placeholder="T.ex. Köttbullar med potatismos och lingon">
+            <label class="form-label">Pris (kr)</label>
+            <input class="form-input" id="dishPrice" type="number" placeholder="125">
+            <button class="btn-primary" onclick="addDish()">+ Lägg till rätt</button>
+          </div>
+          <div id="menuMsg"></div>
+        </div>
+      </section>
+
+      <section class="dash-section" id="dashSectionHours">
+        <div class="section-card">
+          <div class="section-card-header">
+            <div class="section-card-title">Öppettider</div>
+            <div class="section-status missing" id="hoursStatus">Ej tillagda</div>
+          </div>
+          <div class="hours-grid" id="hoursGrid"></div>
+          <button class="btn-primary" onclick="saveHours()">Spara öppettider</button>
+          <div id="hoursMsg"></div>
+        </div>
+      </section>
+
+      <section class="dash-section" id="dashSectionDeals">
+        <div class="section-card">
+          <div class="section-card-header">
+            <div class="section-card-title">Deals</div>
+            <div class="section-status missing">Snart</div>
+          </div>
+          <p class="form-hint">Deals kommer snart.</p>
+        </div>
+      </section>
+
+      <section class="dash-section" id="dashSectionSettings">
+        <div class="section-card">
+          <div class="section-card-header">
+            <div class="section-card-title">Inställningar</div>
+          </div>
+          <div class="readonly-list" id="settingsDetails"></div>
+        </div>
+      </section>
+    </main>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
