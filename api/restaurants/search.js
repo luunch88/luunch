@@ -412,9 +412,11 @@ async function fetchOverpassCityCandidates(filters) {
   const cityRegex = escapeRegex(clean(filters.city));
   const areaQuery = `[out:json][timeout:20];area["name"~"^${cityRegex}",i]["boundary"="administrative"]->.cityArea;(node(area.cityArea)["amenity"~"restaurant|cafe|fast_food|bar|bakery|pub"];way(area.cityArea)["amenity"~"restaurant|cafe|fast_food|bar|bakery|pub"];);out center tags;`;
   const aroundQuery = center
-    ? `[out:json][timeout:20];(node["amenity"~"restaurant|cafe|fast_food|bar|bakery|pub"](around:8000,${center.lat},${center.lon});way["amenity"~"restaurant|cafe|fast_food|bar|bakery|pub"](around:8000,${center.lat},${center.lon}););out center tags;`
+    ? `[out:json][timeout:20];(node["amenity"~"restaurant|cafe|fast_food|bar|bakery|pub"](around:12000,${center.lat},${center.lon});way["amenity"~"restaurant|cafe|fast_food|bar|bakery|pub"](around:12000,${center.lat},${center.lon}););out center tags;`
     : null;
   const errors = [];
+  const allCandidates = [];
+  const seen = new Set();
 
   for (const endpoint of OVERPASS_ENDPOINTS) {
     for (const [queryType, query] of [['area', areaQuery], ['around', aroundQuery]].filter(([, value]) => value)) {
@@ -468,7 +470,12 @@ async function fetchOverpassCityCandidates(filters) {
           names: candidates.map(candidate => candidate.name).slice(0, 12)
         });
 
-        if (candidates.length > 0) return candidates;
+        for (const candidate of candidates) {
+          const key = candidate.source_id || `${normalize(candidate.name)}|${normalize(candidate.address)}|${normalize(candidate.city)}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          allCandidates.push(candidate);
+        }
       } catch (error) {
         const message = error.name === 'AbortError' ? 'Overpass timeout' : error.message;
         errors.push(`${queryType}: ${message}`);
@@ -481,6 +488,16 @@ async function fetchOverpassCityCandidates(filters) {
       } finally {
         clearTimeout(timeout);
       }
+    }
+
+    if (allCandidates.length > 0) {
+      console.log('[restaurants search] overpass city merged candidates', {
+        endpoint,
+        city: filters.city,
+        count: allCandidates.length,
+        names: allCandidates.map(candidate => candidate.name).slice(0, 16)
+      });
+      return allCandidates;
     }
   }
 
