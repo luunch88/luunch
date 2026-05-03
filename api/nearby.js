@@ -5,7 +5,7 @@ const TTL_MS = 6 * 60 * 60 * 1000;
 const GRID_SIZE = 0.005;
 const DEFAULT_RADIUS_METERS = 800;
 const MAX_RESULTS = 30;
-const CACHE_VERSION = 5;
+const CACHE_VERSION = 6;
 const OVERPASS_TIMEOUT_MS = 8000;
 const OVERPASS_ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
@@ -153,8 +153,8 @@ function getLuunchHoursStatus(hours, currentTime) {
     };
   }
 
-  const opens = hours.lunch_opens || hours.opens;
-  const closes = hours.lunch_closes || hours.closes;
+  const opens = hours.opens;
+  const closes = hours.closes;
   const isOpen = isWithinTimeRange(opens, closes, currentTime);
   if (isOpen === null) {
     return {
@@ -226,25 +226,19 @@ function selectCardDishes(dishes = []) {
 }
 
 async function fetchOpeningHours(restaurantIds, dayIndex) {
-  const withLunchColumns = await supabase
-    .from('opening_hours')
-    .select('restaurant_id, opens, closes, lunch_opens, lunch_closes')
-    .in('restaurant_id', restaurantIds)
-    .eq('day_of_week', dayIndex);
-
-  if (!withLunchColumns.error) return withLunchColumns.data || [];
-
-  console.warn('[nearby] opening_hours lunch columns saknas eller kunde inte läsas. Faller tillbaka.', {
-    message: withLunchColumns.error.message
-  });
-
-  const fallback = await supabase
+  const result = await supabase
     .from('opening_hours')
     .select('restaurant_id, opens, closes')
     .in('restaurant_id', restaurantIds)
     .eq('day_of_week', dayIndex);
 
-  return fallback.data || [];
+  if (result.error) {
+    console.warn('[nearby] opening_hours kunde inte läsas.', {
+      message: result.error.message
+    });
+  }
+
+  return result.data || [];
 }
 
 function isFreshSnapshot(snapshot) {
@@ -396,8 +390,8 @@ async function getClaimedData(osmIds) {
         claimedRestaurant.is_open_now = hoursStatus.is_open_now;
         claimedRestaurant.open_status = hoursStatus.open_status;
         claimedRestaurant.today_hours = hoursStatus.today_hours;
-        claimedRestaurant.today_opens = todayHours?.lunch_opens || todayHours?.opens || null;
-        claimedRestaurant.today_closes = todayHours?.lunch_closes || todayHours?.closes || null;
+        claimedRestaurant.today_opens = todayHours?.opens || null;
+        claimedRestaurant.today_closes = todayHours?.closes || null;
       }
 
       claimed.set(restaurant.osm_id, claimedRestaurant);
@@ -556,8 +550,8 @@ async function getVerifiedManualRestaurants(lat, lon, category, radiusMeters) {
           claimed: true,
           verified: true,
           phone: restaurant.phone || null,
-          today_opens: hasLuunchHours ? todayHours?.lunch_opens || todayHours?.opens || null : null,
-          today_closes: hasLuunchHours ? todayHours?.lunch_closes || todayHours?.closes || null : null,
+          today_opens: hasLuunchHours ? todayHours?.opens || null : null,
+          today_closes: hasLuunchHours ? todayHours?.closes || null : null,
           dishes,
           tags: {
             name: restaurant.name,
