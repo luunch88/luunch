@@ -119,28 +119,6 @@ async function insertClaim(payload) {
   return retry.error || null;
 }
 
-async function findDuplicateRestaurant(payload) {
-  const { data, error } = await supabase
-    .from('restaurants')
-    .select('id, name, address, postal_code, city, status, claimed')
-    .ilike('name', payload.restaurant_name)
-    .ilike('address', payload.address)
-    .limit(3);
-
-  if (error) {
-    console.error('[claim] duplicate restaurant check failed', {
-      message: error.message,
-      code: error.code,
-      details: error.details,
-      hint: error.hint
-    });
-    return [];
-  }
-
-  const city = payload.city.toLowerCase();
-  return (data || []).filter(restaurant => String(restaurant.city || '').toLowerCase() === city);
-}
-
 export default async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
@@ -207,15 +185,6 @@ export default async function handler(req, res) {
 
     if (!ALLOWED_STATUSES.has(payload.status)) {
       return res.status(400).json({ ok: false, error: 'Ogiltig status' });
-    }
-
-    const duplicates = await findDuplicateRestaurant(payload);
-    if (duplicates.length > 0) {
-      return res.status(409).json({
-        ok: false,
-        error: 'Denna restaurang verkar redan finnas. Gör anspråk på den istället.',
-        restaurants: duplicates
-      });
     }
 
     const schemaError = await assertClaimsSchema();
