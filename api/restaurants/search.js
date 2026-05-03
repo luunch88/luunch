@@ -62,6 +62,16 @@ function restaurantStatus(restaurant) {
   return restaurant.status || 'unclaimed';
 }
 
+function slugify(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 80) || 'restaurang';
+}
+
 function missingColumn(error) {
   const text = [error?.message, error?.details, error?.hint].filter(Boolean).join(' ');
   return text.match(/'([^']+)' column/)?.[1] || null;
@@ -526,18 +536,26 @@ async function importExternalCandidates(supabase, candidates) {
     const now = new Date().toISOString();
     const restaurant = await writeRestaurantWithFallback(supabase, {
       name: candidate.name,
+      slug: slugify(`${candidate.name}-${candidate.city || ''}`),
       address: candidate.address || null,
       postal_code: candidate.postal_code,
       city: candidate.city || null,
       category: candidate.category || 'restaurant',
+      type: candidate.category || 'restaurant',
       source: candidate.source,
       source_id: candidate.source_id,
       osm_id: candidate.osm_id,
       lat: candidate.lat,
       lon: candidate.lon,
+      email: '',
+      claim_email: null,
+      phone: null,
+      website: null,
       status: 'unclaimed',
       claimed: false,
       verified: false,
+      owner_user_id: null,
+      claimed_by_user_id: null,
       visible: true,
       created_at: now,
       updated_at: now
@@ -587,6 +605,17 @@ export default async function handler(req, res) {
     const q = clean(req.query?.q);
     const city = clean(req.query?.city);
     const address = clean(req.query?.address);
+    const debug = String(req.query?.debug || '') === '1';
+    const debugInfo = {
+      supabaseRows: 0,
+      snapshotCandidates: 0,
+      nominatimCandidates: 0,
+      broadCandidates: 0,
+      overpassNameCandidates: 0,
+      overpassCityCandidates: 0,
+      imported: 0,
+      final: 0
+    };
     if (!q && !city && !address) {
       return res.status(400).json({ ok: false, error: 'Söktext krävs' });
     }
@@ -611,6 +640,8 @@ export default async function handler(req, res) {
       return res.status(500).json({ ok: false, error: error.message });
     }
 
+    debugInfo.supabaseRows = (data || []).length;
+
     let restaurants = (data || [])
       .filter(restaurant => includesNormalized(restaurant.name, q))
       .filter(restaurant => includesNormalized(restaurant.city, city))
@@ -622,27 +653,34 @@ export default async function handler(req, res) {
 
     if (q || city) {
       let externalCandidates = await fetchSnapshotCandidates(supabase, { q, city, address });
+      debugInfo.snapshotCandidates = externalCandidates.length;
       if (externalCandidates.length === 0 && restaurants.length === 0) {
         externalCandidates = q
           ? await fetchExternalCandidates({ q, city, address })
           : [];
+        debugInfo.nominatimCandidates = externalCandidates.length;
       }
       if (externalCandidates.length === 0 && restaurants.length === 0) {
         externalCandidates = q
           ? await fetchExternalCandidatesBroad({ q, city, address })
           : [];
+        debugInfo.broadCandidates = externalCandidates.length;
       }
       if (externalCandidates.length === 0 && q && restaurants.length === 0) {
         externalCandidates = q
           ? await fetchOverpassCandidates({ q, city, address })
           : [];
+        debugInfo.overpassNameCandidates = externalCandidates.length;
       }
       if (city) {
         const cityCandidates = await fetchOverpassCityCandidates({ q, city, address });
+        debugInfo.overpassCityCandidates = cityCandidates.length;
         externalCandidates = [...externalCandidates, ...cityCandidates];
       }
       const imported = await importExternalCandidates(supabase, externalCandidates);
+      debugInfo.imported = imported.length;
       restaurants = mergeRestaurants(restaurants, imported);
+      debugInfo.final = restaurants.length;
       console.log('[restaurants search] external fallback imported', {
         query: q,
         city,
@@ -652,7 +690,8 @@ export default async function handler(req, res) {
       });
     }
 
-    return res.status(200).json({ ok: true, restaurants });
+    debugInfo.final = restaurants.length;
+    return res.status(200).json(debug ? { ok: true, restaurants, debug: debugInfo } : { ok: true, restaurants });
   } catch (e) {
     console.error('[restaurants search] handler error', { message: e.message, stack: e.stack });
     return res.status(500).json({ ok: false, error: e.message || 'Kunde inte söka restauranger' });
