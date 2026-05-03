@@ -48,6 +48,7 @@ header {
 .form-input:focus { border-color: var(--accent); }
 .form-hint { font-size: 0.75rem; color: var(--ink2); margin-bottom: 20px; line-height: 1.5; }
 .field-help { font-size: 0.72rem; color: var(--ink2); line-height: 1.45; margin: -8px 0 10px; }
+.search-help { margin: -4px 0 12px; }
 .field-error { min-height: 14px; margin: -10px 0 12px; color: var(--red); font-size: 0.74rem; line-height: 1.35; }
 .form-input.has-error { border-color: rgba(224,82,82,0.8); }
 
