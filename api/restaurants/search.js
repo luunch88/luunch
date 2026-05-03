@@ -312,8 +312,10 @@ async function geocodeCity(city) {
     clearTimeout(timeout);
   }
 
-  if (!first || !Number.isFinite(first.lat) || !Number.isFinite(first.lon)) return null;
-  return { lat: Number(first.lat), lon: Number(first.lon) };
+  const lat = Number(first?.lat);
+  const lon = Number(first?.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  return { lat, lon };
 }
 
 async function fetchOverpassCandidates(filters) {
