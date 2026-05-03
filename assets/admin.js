@@ -16,6 +16,7 @@
   const claimsList = document.getElementById('claimsList');
   const restaurantsList = document.getElementById('restaurantsList');
   const restaurantQuery = document.getElementById('restaurantQuery');
+  const duplicatesList = document.getElementById('duplicatesList');
   const importCity = document.getElementById('importCity');
   const importResult = document.getElementById('importResult');
 
@@ -305,6 +306,148 @@
     });
   }
 
+  function normalizeDuplicatePart(value) {
+    return String(value || '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/&/g, 'and')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .replace(/\b(restaurang|restaurant|pizzeria|pizza|krog|cafe|café)\b/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function duplicateKey(restaurant) {
+    const name = normalizeDuplicatePart(restaurant.name);
+    if (!name) return '';
+    return name;
+  }
+
+  function isProtectedRestaurant(restaurant) {
+    return Boolean(
+      restaurant.claimed ||
+      restaurant.verified ||
+      restaurant.claimed_by_user_id ||
+      restaurant.owner_user_id ||
+      restaurant.status === 'claimed' ||
+      restaurant.status === 'verified'
+    );
+  }
+
+  function groupDuplicates(restaurants) {
+    const groups = new Map();
+    restaurants.forEach(restaurant => {
+      const key = duplicateKey(restaurant);
+      if (!key) return;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(restaurant);
+    });
+    return [...groups.values()]
+      .filter(group => group.length > 1)
+      .sort((a, b) => String(a[0].name || '').localeCompare(String(b[0].name || ''), 'sv'));
+  }
+
+  function renderDuplicates(groups) {
+    duplicatesList.textContent = '';
+    if (!groups.length) {
+      const empty = document.createElement('div');
+      empty.className = 'empty';
+      empty.textContent = 'Inga tydliga dubbletter hittades.';
+      duplicatesList.appendChild(empty);
+      return;
+    }
+
+    groups.forEach(group => {
+      const wrapper = document.createElement('article');
+      wrapper.className = 'duplicate-group';
+
+      const title = document.createElement('div');
+      title.className = 'duplicate-title';
+      title.textContent = `${group[0].name || 'Namnlös restaurang'} (${group.length})`;
+      wrapper.appendChild(title);
+
+      group.forEach(restaurant => {
+        const row = document.createElement('div');
+        row.className = 'duplicate-row';
+
+        const main = document.createElement('div');
+        main.className = 'duplicate-row-main';
+
+        const name = document.createElement('div');
+        name.className = 'duplicate-name';
+        name.textContent = restaurant.name || 'Namnlös restaurang';
+
+        const meta = document.createElement('div');
+        meta.className = 'duplicate-meta';
+        meta.textContent = [
+          [restaurant.address, restaurant.postal_code, restaurant.city].filter(Boolean).join(', '),
+          restaurant.category,
+          restaurant.source,
+          restaurant.osm_id,
+          restaurant.status || (restaurant.claimed ? 'claimed' : 'unclaimed')
+        ].filter(Boolean).join(' - ');
+
+        main.append(name, meta);
+
+        const actions = document.createElement('div');
+        actions.className = 'duplicate-row-actions';
+        const protectedRow = isProtectedRestaurant(restaurant);
+
+        const badge = document.createElement('span');
+        badge.className = protectedRow ? 'duplicate-badge protected' : 'duplicate-badge';
+        badge.textContent = protectedRow ? 'Skyddad' : 'Kan tas bort';
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'btn-secondary duplicate-delete';
+        deleteBtn.type = 'button';
+        deleteBtn.textContent = 'Ta bort';
+        deleteBtn.disabled = protectedRow;
+        deleteBtn.addEventListener('click', () => deleteRestaurant(restaurant));
+
+        actions.append(badge, deleteBtn);
+        row.append(main, actions);
+        wrapper.appendChild(row);
+      });
+
+      duplicatesList.appendChild(wrapper);
+    });
+  }
+
+  async function findDuplicates() {
+    setMsg(adminMsg, 'Söker dubbletter...');
+    duplicatesList.textContent = 'Söker...';
+    try {
+      const data = await api('/api/admin/restaurants');
+      const groups = groupDuplicates(data.restaurants || []);
+      renderDuplicates(groups);
+      setMsg(adminMsg, `Hittade ${groups.length} möjliga dubblettgrupper.`, groups.length ? 'success' : '');
+    } catch (error) {
+      duplicatesList.textContent = '';
+      setMsg(adminMsg, error.message, 'error');
+    }
+  }
+
+  async function deleteRestaurant(restaurant) {
+    const name = restaurant.name || 'restaurangen';
+    const ok = window.confirm(`Ta bort "${name}"? Detta går bara för oclaimade/overifierade restauranger.`);
+    if (!ok) return;
+
+    setMsg(adminMsg, 'Tar bort restaurang...');
+    try {
+      await api('/api/admin/restaurants/delete', {
+        method: 'POST',
+        body: JSON.stringify({ id: restaurant.id })
+      });
+      await loadRestaurants();
+      await findDuplicates();
+      setMsg(adminMsg, 'Restaurangen är borttagen.', 'success');
+    } catch (error) {
+      setMsg(adminMsg, error.message, 'error');
+    }
+  }
+
   async function loadRestaurants() {
     setMsg(adminMsg, 'Hämtar restauranger...');
     try {
@@ -348,6 +491,7 @@
   });
   document.getElementById('loadClaimsBtn').addEventListener('click', loadClaims);
   document.getElementById('loadRestaurantsBtn').addEventListener('click', loadRestaurants);
+  document.getElementById('findDuplicatesBtn').addEventListener('click', findDuplicates);
   document.getElementById('importCityBtn').addEventListener('click', importCityRestaurants);
   statusFilter.addEventListener('change', loadClaims);
   document.querySelectorAll('.admin-nav').forEach(button => {
