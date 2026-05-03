@@ -147,6 +147,8 @@ header {
 .dish-item-info { flex: 1; min-width: 0; }
 .dish-item-name { font-size: 0.85rem; font-weight: 500; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dish-item-price { font-size: 0.75rem; color: var(--accent); font-weight: 600; }
+.dish-featured { display: inline-flex; align-items: center; gap: 7px; color: var(--ink2); font-size: 0.74rem; font-weight: 700; margin-top: 7px; cursor: pointer; user-select: none; }
+.dish-featured input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
 .dish-item-delete { background: transparent; border: 1px solid var(--border); border-radius: 8px; min-width: 74px; height: 32px; padding: 0 9px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 0.76rem; font-weight: 800; color: var(--ink2); flex-shrink: 0; transition: border-color 0.15s, color 0.15s; }
 .dish-item-delete:hover { border-color: var(--red); color: var(--red); }
 .dishes-empty { font-size: 0.8rem; color: var(--ink2); text-align: center; padding: 14px; background: var(--surface2); border: 1px dashed var(--border); border-radius: var(--radius-sm); margin-bottom: 14px; }
