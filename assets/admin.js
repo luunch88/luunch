@@ -78,6 +78,19 @@
     adminMsg.textContent = '';
   }
 
+  function isTrue(value) {
+    return value === true || value === 'true' || value === 1 || value === '1';
+  }
+
+  function restaurantStatusLabel(restaurant) {
+    if (isTrue(restaurant.verified)) return 'verified';
+    if (isTrue(restaurant.claimed)) return 'claimed';
+    const status = String(restaurant.status || '').toLowerCase();
+    if (status === 'pending_claim') return 'pending_claim';
+    if (status === 'unclaimed') return 'unclaimed';
+    return 'unclaimed';
+  }
+
   async function login() {
     const secret = secretInput.value.trim();
     if (!secret) {
@@ -298,7 +311,7 @@
       meta.textContent = [
         [restaurant.address, restaurant.postal_code, restaurant.city].filter(Boolean).join(', '),
         restaurant.category,
-        restaurant.status || (restaurant.claimed ? 'claimed' : 'unclaimed'),
+        restaurantStatusLabel(restaurant),
         restaurant.source
       ].filter(Boolean).join(' - ');
       row.append(title, meta);
@@ -327,12 +340,10 @@
 
   function isProtectedRestaurant(restaurant) {
     return Boolean(
-      restaurant.claimed ||
-      restaurant.verified ||
+      isTrue(restaurant.claimed) ||
+      isTrue(restaurant.verified) ||
       restaurant.claimed_by_user_id ||
-      restaurant.owner_user_id ||
-      restaurant.status === 'claimed' ||
-      restaurant.status === 'verified'
+      restaurant.owner_user_id
     );
   }
 
@@ -386,7 +397,7 @@
           restaurant.category,
           restaurant.source,
           restaurant.osm_id,
-          restaurant.status || (restaurant.claimed ? 'claimed' : 'unclaimed')
+          restaurantStatusLabel(restaurant)
         ].filter(Boolean).join(' - ');
 
         main.append(name, meta);
