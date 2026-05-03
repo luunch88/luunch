@@ -113,7 +113,7 @@ async function findExistingRestaurant(supabase, claim) {
   return data || null;
 }
 
-async function approveRestaurantClaim(supabase, claim, lat, lon) {
+async function approveRestaurantClaim(supabase, claim, lat, lon, selectedRestaurantId = null) {
   const now = new Date().toISOString();
   const restaurantPatch = {
     name: claim.restaurant_name,
@@ -131,13 +131,18 @@ async function approveRestaurantClaim(supabase, claim, lat, lon) {
     claim_email: claim.email,
     status: 'claimed',
     claimed_at: now,
-    lat,
-    lon,
     visible: true,
     updated_at: now
   };
 
-  const existing = await findExistingRestaurant(supabase, claim);
+  if (hasValidLocation(lat, lon)) {
+    restaurantPatch.lat = lat;
+    restaurantPatch.lon = lon;
+  }
+
+  const existing = selectedRestaurantId
+    ? { id: selectedRestaurantId }
+    : await findExistingRestaurant(supabase, claim);
   if (existing) {
     return writeRestaurantWithSchemaFallback(supabase, 'update', restaurantPatch, existing.id);
   }
@@ -177,6 +182,7 @@ export default async function handler(req, res) {
     const id = cleanText(req.body?.id);
     const status = cleanText(req.body?.status);
     const adminNote = cleanText(req.body?.admin_note);
+    const restaurantId = cleanText(req.body?.restaurant_id);
     const lat = optionalNumber(req.body?.lat ?? req.body?.latitude);
     const lon = optionalNumber(req.body?.lon ?? req.body?.longitude);
 
@@ -189,10 +195,10 @@ export default async function handler(req, res) {
     let message = 'Ansökan uppdaterad';
 
     if (status === 'approved') {
-      if (!hasValidLocation(lat, lon)) {
+      if (!restaurantId && !hasValidLocation(lat, lon)) {
         return res.status(400).json({
           ok: false,
-          error: 'Latitude och longitude krävs för att godkänna restaurangen'
+          error: 'Välj befintlig restaurang eller fyll i latitude och longitude för att skapa ny.'
         });
       }
 
@@ -220,8 +226,8 @@ export default async function handler(req, res) {
         });
       }
 
-      restaurant = await approveRestaurantClaim(supabase, claim, lat, lon);
-      message = 'Restaurang skapad och kopplad';
+      restaurant = await approveRestaurantClaim(supabase, claim, lat, lon, restaurantId);
+      message = restaurantId ? 'Restaurang kopplad' : 'Restaurang skapad och kopplad';
     }
 
     const update = {
