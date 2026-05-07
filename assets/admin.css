@@ -41,6 +41,7 @@ html, body { min-height: 100%; background: var(--bg); color: var(--ink); font-fa
 .form-input:focus { border-color: var(--accent); }
 .compact-input { margin-bottom: 0; }
 .secret-row { display: grid; gap: 10px; }
+.import-grid { display: grid; gap: 10px; }
 .btn-primary, .btn-secondary { border-radius: var(--radius-sm); cursor: pointer; font: inherit; font-size: 0.86rem; font-weight: 900; padding: 12px 14px; min-height: 44px; }
 .btn-primary { background: var(--accent); color: white; border: 1px solid rgba(255,255,255,0.08); }
 .btn-secondary { background: transparent; border: 1px solid var(--border); color: var(--ink2); }
@@ -92,6 +93,7 @@ html, body { min-height: 100%; background: var(--bg); color: var(--ink); font-fa
   .admin-top { flex-direction: row; justify-content: space-between; align-items: flex-start; }
   .toolbar-panel { grid-template-columns: auto minmax(220px, 1fr) auto; }
   .secret-row { grid-template-columns: 1fr auto; align-items: start; }
+  .import-grid { grid-template-columns: minmax(190px, 1.2fr) minmax(140px, 0.8fr) minmax(140px, 0.8fr) minmax(120px, 0.6fr) auto; align-items: start; }
   .claim-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .claim-actions { grid-template-columns: minmax(0, 1fr) minmax(230px, 1.2fr) minmax(180px, 1fr) 130px 130px; align-items: start; }
   .admin-location-group { grid-template-columns: 1fr 1fr; }
