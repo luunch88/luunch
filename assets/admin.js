@@ -508,7 +508,10 @@
       }
       const res = await fetch(`/api/restaurants/search?${params.toString()}`);
       const data = await res.json().catch(() => ({ ok: false, error: 'API:t returnerade inte JSON.' }));
-      if (!res.ok || data.ok === false) throw new Error(data.error || 'Import misslyckades.');
+      if (!res.ok || data.ok === false) {
+        console.error('[admin import] failed', { status: res.status, params: Object.fromEntries(params), data });
+        throw new Error(data.error || 'Import misslyckades.');
+      }
       const target = city || `${lat}, ${lon}`;
       importResult.textContent = `Klart. ${data.restaurants?.length || 0} restauranger finns nu för ${target}. Importerade: ${data.debug?.imported ?? 'ok'}.`;
     } catch (error) {
