@@ -41,6 +41,18 @@ function includesNormalized(source, needle) {
     sourceNorm.replace(/\s+/g, '').includes(needleNorm.replace(/\s+/g, ''));
 }
 
+function distanceMeters(aLat, aLon, bLat, bLon) {
+  const R = 6371000;
+  const toRad = value => (value * Math.PI) / 180;
+  const dLat = toRad(bLat - aLat);
+  const dLon = toRad(bLon - aLon);
+  const lat1 = toRad(aLat);
+  const lat2 = toRad(bLat);
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+
 function matchesExternalName(candidate, needle) {
   if (!needle) return true;
   return includesNormalized(candidate.name, needle) ||
@@ -90,7 +102,7 @@ async function runRestaurantSearch(supabase, filters, columns) {
   let query = supabase
     .from('restaurants')
     .select(columns.join(', '))
-    .limit(50);
+    .limit(Number.isFinite(filters.lat) && Number.isFinite(filters.lon) ? 1000 : 50);
 
   if (filters.q) query = query.ilike('name', `%${filters.q}%`);
   if (filters.city) query = query.ilike('city', `%${filters.city}%`);
@@ -508,6 +520,85 @@ async function fetchOverpassCityCandidates(filters) {
   return [];
 }
 
+async function fetchOverpassAroundCandidates(filters) {
+  if (!Number.isFinite(filters.lat) || !Number.isFinite(filters.lon)) return [];
+
+  const radius = Number.isFinite(filters.radius) ? filters.radius : 12000;
+  const query = `[out:json][timeout:20];(node["amenity"~"restaurant|cafe|fast_food|bar|bakery|pub"](around:${radius},${filters.lat},${filters.lon});way["amenity"~"restaurant|cafe|fast_food|bar|bakery|pub"](around:${radius},${filters.lat},${filters.lon}););out center tags;`;
+  const errors = [];
+
+  for (const endpoint of OVERPASS_ENDPOINTS) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), OVERPASS_TIMEOUT_MS);
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+          'User-Agent': 'luunch.se/1.0 contact@luunch.se'
+        },
+        body: 'data=' + encodeURIComponent(query),
+        signal: controller.signal
+      });
+
+      if (!response.ok) throw new Error(`Overpass HTTP ${response.status}`);
+      const data = await response.json();
+      const candidates = (data.elements || [])
+        .map(element => {
+          const tags = element.tags || {};
+          const lat = element.lat || element.center?.lat;
+          const lon = element.lon || element.center?.lon;
+          return {
+            name: tags.name || '',
+            address: overpassAddress(tags),
+            postal_code: tags['addr:postcode'] || null,
+            city: overpassCity(tags, filters.city),
+            display_name: [tags.name, overpassAddress(tags), overpassCity(tags, filters.city)].filter(Boolean).join(', '),
+            category: tags.cuisine || tags.amenity || 'restaurant',
+            source: 'osm',
+            source_id: overpassSourceId(element),
+            osm_id: overpassSourceId(element),
+            lat: lat === undefined ? null : Number(lat),
+            lon: lon === undefined ? null : Number(lon)
+          };
+        })
+        .filter(candidate => candidate.name)
+        .filter(candidate => !filters.q || matchesExternalName(candidate, filters.q))
+        .filter(candidate => !filters.city || matchesExternalCity(candidate, filters.city))
+        .filter(candidate => !filters.address || !candidate.address || includesNormalized(candidate.address, filters.address));
+
+      console.log('[restaurants search] overpass coordinate candidates', {
+        endpoint,
+        lat: filters.lat,
+        lon: filters.lon,
+        radius,
+        raw: data.elements?.length || 0,
+        count: candidates.length,
+        names: candidates.map(candidate => candidate.name).slice(0, 16)
+      });
+
+      return candidates;
+    } catch (error) {
+      const message = error.name === 'AbortError' ? 'Overpass timeout' : error.message;
+      errors.push(message);
+      console.error('[restaurants search] overpass coordinate fallback failed', {
+        endpoint,
+        message,
+        filters
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  console.error('[restaurants search] all overpass coordinate fallback endpoints failed', {
+    errors,
+    filters
+  });
+  return [];
+}
+
 async function writeRestaurantWithFallback(supabase, payload) {
   let nextPayload = { ...payload };
 
@@ -633,6 +724,12 @@ export default async function handler(req, res) {
     const q = clean(req.query?.q);
     const city = clean(req.query?.city);
     const address = clean(req.query?.address);
+    const latRaw = clean(req.query?.lat).replace(',', '.');
+    const lonRaw = clean(req.query?.lon).replace(',', '.');
+    const radiusRaw = clean(req.query?.radius);
+    const lat = latRaw ? Number(latRaw) : null;
+    const lon = lonRaw ? Number(lonRaw) : null;
+    const radius = radiusRaw ? Number(radiusRaw) : 12000;
     const debug = String(req.query?.debug || '') === '1';
     const refreshExternal = String(req.query?.refresh_external || '') === '1';
     const debugInfo = {
@@ -642,21 +739,29 @@ export default async function handler(req, res) {
       broadCandidates: 0,
       overpassNameCandidates: 0,
       overpassCityCandidates: 0,
+      overpassCoordinateCandidates: 0,
       imported: 0,
       final: 0
     };
-    if (!q && !city && !address) {
+    const hasCoordinates = Number.isFinite(lat) && Number.isFinite(lon);
+    if ((latRaw || lonRaw) && !hasCoordinates) {
+      return res.status(400).json({ ok: false, error: 'Latitud och longitud måste vara giltiga nummer' });
+    }
+    if (!Number.isFinite(radius) || radius < 500 || radius > 30000) {
+      return res.status(400).json({ ok: false, error: 'Radie måste vara mellan 500 och 30000 meter' });
+    }
+    if (!q && !city && !address && !hasCoordinates) {
       return res.status(400).json({ ok: false, error: 'Söktext krävs' });
     }
 
-    let columns = ['id', 'name', 'address', 'postal_code', 'city', 'category', 'status', 'owner_user_id', 'claimed', 'verified'];
-    let { data, error } = await runRestaurantSearch(supabase, { q, city, address, refreshExternal }, columns);
+    let columns = ['id', 'name', 'address', 'postal_code', 'city', 'category', 'status', 'owner_user_id', 'claimed', 'verified', 'lat', 'lon', 'source', 'source_id', 'osm_id'];
+    let { data, error } = await runRestaurantSearch(supabase, { q, city, address, lat, lon, refreshExternal }, columns);
     for (let attempt = 0; error && attempt < 4; attempt += 1) {
       const column = missingColumn(error);
       if (error.code !== 'PGRST204' || !column || !columns.includes(column)) break;
       columns = columns.filter(item => item !== column);
       console.warn('[restaurants search] retrying without missing column', { column, columns });
-      ({ data, error } = await runRestaurantSearch(supabase, { q, city, address, refreshExternal }, columns));
+      ({ data, error } = await runRestaurantSearch(supabase, { q, city, address, lat, lon, refreshExternal }, columns));
     }
 
     if (error) {
@@ -675,13 +780,22 @@ export default async function handler(req, res) {
       .filter(restaurant => includesNormalized(restaurant.name, q))
       .filter(restaurant => includesNormalized(restaurant.city, city))
       .filter(restaurant => !address || refreshExternal || includesNormalized(restaurant.address, address))
+      .filter(restaurant => {
+        if (!hasCoordinates) return true;
+        const restaurantLat = Number(restaurant.lat);
+        const restaurantLon = Number(restaurant.lon);
+        if (!Number.isFinite(restaurantLat) || !Number.isFinite(restaurantLon)) return false;
+        return distanceMeters(lat, lon, restaurantLat, restaurantLon) <= radius;
+      })
       .map(restaurant => ({
         ...restaurant,
         status: restaurantStatus(restaurant)
       }));
 
-    if (q || city || refreshExternal) {
-      let externalCandidates = await fetchSnapshotCandidates(supabase, { q, city, address });
+    if (q || city || hasCoordinates || refreshExternal) {
+      let externalCandidates = hasCoordinates && !q && !city && !address
+        ? []
+        : await fetchSnapshotCandidates(supabase, { q, city, address });
       debugInfo.snapshotCandidates = externalCandidates.length;
       if (externalCandidates.length === 0 && (restaurants.length === 0 || refreshExternal)) {
         externalCandidates = q
@@ -705,6 +819,11 @@ export default async function handler(req, res) {
         const cityCandidates = await fetchOverpassCityCandidates({ q, city, address });
         debugInfo.overpassCityCandidates = cityCandidates.length;
         externalCandidates = [...externalCandidates, ...cityCandidates];
+      }
+      if (hasCoordinates) {
+        const coordinateCandidates = await fetchOverpassAroundCandidates({ q, city, address, lat, lon, radius });
+        debugInfo.overpassCoordinateCandidates = coordinateCandidates.length;
+        externalCandidates = [...externalCandidates, ...coordinateCandidates];
       }
       const imported = await importExternalCandidates(supabase, externalCandidates);
       debugInfo.imported = imported.length;
