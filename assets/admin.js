@@ -18,6 +18,9 @@
   const restaurantQuery = document.getElementById('restaurantQuery');
   const duplicatesList = document.getElementById('duplicatesList');
   const importCity = document.getElementById('importCity');
+  const importLat = document.getElementById('importLat');
+  const importLon = document.getElementById('importLon');
+  const importRadius = document.getElementById('importRadius');
   const importResult = document.getElementById('importResult');
 
   function setMsg(target, text, type = '') {
@@ -475,17 +478,39 @@
 
   async function importCityRestaurants() {
     const city = importCity.value.trim();
-    if (!city) {
-      importResult.textContent = 'Ange ort.';
+    const latValue = importLat.value.trim().replace(',', '.');
+    const lonValue = importLon.value.trim().replace(',', '.');
+    const radiusValue = importRadius.value.trim();
+    const lat = latValue ? Number(latValue) : null;
+    const lon = lonValue ? Number(lonValue) : null;
+    const radius = radiusValue ? Number(radiusValue) : 12000;
+
+    if (!city && (!Number.isFinite(lat) || !Number.isFinite(lon))) {
+      importResult.textContent = 'Ange ort eller både latitud och longitud.';
+      return;
+    }
+    if ((latValue || lonValue) && (!Number.isFinite(lat) || !Number.isFinite(lon))) {
+      importResult.textContent = 'Latitud och longitud måste vara giltiga nummer.';
+      return;
+    }
+    if (!Number.isFinite(radius) || radius < 500 || radius > 30000) {
+      importResult.textContent = 'Radie måste vara mellan 500 och 30000 meter.';
       return;
     }
     importResult.textContent = 'Importerar...';
     try {
-      const params = new URLSearchParams({ city, refresh_external: '1', debug: '1' });
+      const params = new URLSearchParams({ refresh_external: '1', debug: '1' });
+      if (city) params.set('city', city);
+      if (Number.isFinite(lat) && Number.isFinite(lon)) {
+        params.set('lat', String(lat));
+        params.set('lon', String(lon));
+        params.set('radius', String(radius));
+      }
       const res = await fetch(`/api/restaurants/search?${params.toString()}`);
       const data = await res.json().catch(() => ({ ok: false, error: 'API:t returnerade inte JSON.' }));
       if (!res.ok || data.ok === false) throw new Error(data.error || 'Import misslyckades.');
-      importResult.textContent = `Klart. ${data.restaurants?.length || 0} restauranger finns nu för ${city}. Importerade: ${data.debug?.imported ?? 'ok'}.`;
+      const target = city || `${lat}, ${lon}`;
+      importResult.textContent = `Klart. ${data.restaurants?.length || 0} restauranger finns nu för ${target}. Importerade: ${data.debug?.imported ?? 'ok'}.`;
     } catch (error) {
       importResult.textContent = error.message;
     }
