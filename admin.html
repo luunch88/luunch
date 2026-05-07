@@ -79,11 +79,14 @@
 
       <section class="admin-section" id="sectionImport">
         <div class="panel">
-          <h2 class="panel-title">Importera restauranger för ort</h2>
-          <p class="panel-text">Fyll på Supabase med restauranger från OSM/Overpass för en ort. Importen undviker dubbletter via OSM-id.</p>
+          <h2 class="panel-title">Importera restauranger</h2>
+          <p class="panel-text">Fyll på Supabase med restauranger från OSM/Overpass. Sök med ort eller ange latitud/longitud för mer exakt import.</p>
           <label class="form-label" for="importCity">Ort</label>
-          <div class="secret-row">
+          <div class="import-grid">
             <input class="form-input" id="importCity" type="text" placeholder="T.ex. Kävlinge">
+            <input class="form-input" id="importLat" type="text" inputmode="decimal" placeholder="Latitud, t.ex. 55.766">
+            <input class="form-input" id="importLon" type="text" inputmode="decimal" placeholder="Longitud, t.ex. 13.014">
+            <input class="form-input" id="importRadius" type="number" min="500" max="30000" step="500" value="12000" placeholder="Radie meter">
             <button class="btn-primary" id="importCityBtn" type="button">Importera</button>
           </div>
           <div id="importResult" class="import-result"></div>
