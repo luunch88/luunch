@@ -602,7 +602,8 @@ async function fetchOverpassAroundCandidates(filters) {
 async function writeRestaurantWithFallback(supabase, payload) {
   let nextPayload = { ...payload };
 
-  for (let attempt = 0; attempt < 8; attempt += 1) {
+  const maxAttempts = Object.keys(nextPayload).length + 1;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const { data, error } = await supabase
       .from('restaurants')
       .insert(nextPayload)
@@ -756,7 +757,8 @@ export default async function handler(req, res) {
 
     let columns = ['id', 'name', 'address', 'postal_code', 'city', 'category', 'status', 'owner_user_id', 'claimed', 'verified', 'lat', 'lon', 'source', 'source_id', 'osm_id'];
     let { data, error } = await runRestaurantSearch(supabase, { q, city, address, lat, lon, refreshExternal }, columns);
-    for (let attempt = 0; error && attempt < 4; attempt += 1) {
+    const maxColumnAttempts = columns.length + 2;
+    for (let attempt = 0; error && attempt < maxColumnAttempts; attempt += 1) {
       const column = missingColumn(error);
       if (error.code !== 'PGRST204' || !column || !columns.includes(column)) break;
       columns = columns.filter(item => item !== column);
